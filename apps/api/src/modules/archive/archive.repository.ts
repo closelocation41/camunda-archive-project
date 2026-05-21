@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { Pool } from 'pg';
+import { Pool, PoolClient } from 'pg';
 import { ARCHIVE_DB, CAMUNDA_DB } from '../database/database.module';
 import { ArchiveQueryDto } from './dto/archive-query.dto';
 
@@ -19,6 +19,8 @@ const HISTORY_TABLES = [
 
 @Injectable()
 export class ArchiveRepository {
+  private readonly targetColumnCache = new Map<string, Set<string>>();
+
   constructor(
     @Inject(ARCHIVE_DB) private readonly archiveDb: Pool,
     @Inject(CAMUNDA_DB) private readonly camundaDb: Pool,
@@ -110,9 +112,10 @@ export class ArchiveRepository {
       await archiveClient.query('begin');
       for (const [source, target] of HISTORY_TABLES) {
         const { rows } = await camundaClient.query(`select * from ${source} where ${this.processFilter(source)}`, [processIds]);
+        const targetColumns = await this.archiveColumns(archiveClient, target);
         for (const row of rows) {
-          const columns = Object.keys(row);
-          const values = Object.values(row);
+          const columns = Object.keys(row).filter((column) => targetColumns.has(column));
+          const values = columns.map((column) => row[column]);
           const placeholders = columns.map((_, index) => `$${index + 1}`);
           await archiveClient.query(
             `insert into ${target} (${columns.join(', ')}, archive_run_id)
@@ -198,5 +201,22 @@ export class ArchiveRepository {
       )`;
     }
     return 'proc_inst_id_ = any($1)';
+  }
+
+  private async archiveColumns(client: PoolClient, tableName: string) {
+    const cached = this.targetColumnCache.get(tableName);
+    if (cached) {
+      return cached;
+    }
+
+    const { rows } = await client.query<{ column_name: string }>(
+      `select column_name
+       from information_schema.columns
+       where table_schema = 'public' and table_name = $1`,
+      [tableName],
+    );
+    const columns = new Set(rows.map((row) => row.column_name));
+    this.targetColumnCache.set(tableName, columns);
+    return columns;
   }
 }
