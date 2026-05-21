@@ -21,7 +21,9 @@ async function bootstrap() {
 
   const swaggerConfig = new DocumentBuilder()
     .setTitle('Camunda External History Archive API')
-    .setDescription('Workflow monitoring, external history archive, analytics, and restore APIs for Camunda 7.')
+    .setDescription(
+      'Workflow monitoring, external history archive, analytics, and re-sync APIs for Camunda 7. Archive moves history rows from Camunda history tables into archive tables; re-sync moves archived history rows back into Camunda history tables.',
+    )
     .setVersion('0.1.0')
     .addBearerAuth()
     .build();

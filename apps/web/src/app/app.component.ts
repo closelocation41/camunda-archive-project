@@ -26,6 +26,7 @@ import { ApiService } from './core/api.service';
           <a routerLink="/restore" routerLinkActive="active">Restore Workflow</a>
           <a routerLink="/operations" routerLinkActive="active">Cleanup Monitoring</a>
           <span class="nav-label">External Tools</span>
+          <a href="http://localhost:3000/api/docs" target="_blank" rel="noreferrer">API Docs</a>
           <a href="http://localhost:8080" target="_blank" rel="noreferrer">Camunda UI</a>
           <a href="http://localhost:3001" target="_blank" rel="noreferrer">Grafana</a>
           <a href="http://localhost:9090" target="_blank" rel="noreferrer">Prometheus</a>

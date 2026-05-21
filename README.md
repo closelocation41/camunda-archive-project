@@ -36,6 +36,7 @@ npm run docker:up
 
 API: http://localhost:3000/api  
 Swagger: http://localhost:3000/api/docs  
+Swagger JSON: http://localhost:3000/api/docs-json  
 Web: http://localhost:4200  
 Camunda Cockpit/Tasklist/Admin: http://localhost:8080  
 Database UI: http://localhost:8081  
@@ -94,6 +95,7 @@ Active runtime instances are never archived, and the system does not write to `A
 - Completed Workflows: select unarchived completed instances and archive them.
 - Failed Workflows: select unarchived failed instances and archive them.
 - Archived Workflows: search archived history and re-sync selected archived instances back to Camunda history.
+- Workflow list pages show 10 records per page with Previous and Next controls.
 - Incident Monitoring: inspect active Camunda incidents.
 - Restore Workflow: operator-driven restore/re-sync form for archived workflow ids.
 - Cleanup Monitoring: scheduler and archive run visibility.
@@ -105,3 +107,5 @@ Active runtime instances are never archived, and the system does not write to `A
 - Archive: run scheduled archive modes or archive selected completed/failed process instance ids.
 - Re-sync: move archived workflow history back into the Camunda history database.
 - Analytics: dashboard, BPMN execution timeline, metrics, health, and scheduler trigger endpoints.
+
+Swagger/OpenAPI at `/api/docs` includes operation summaries, request examples, response examples, bearer authentication, archive pagination parameters, selected archive APIs, and single/batch re-sync APIs.

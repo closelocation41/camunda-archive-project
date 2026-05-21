@@ -18,7 +18,8 @@ The cleanup job should remain a placeholder unless your estate needs extra reten
 | --- | --- | --- |
 | Web UI | `http://localhost:4200` | Login with `admin/admin`, `operator/operator`, `auditor/auditor`, or `viewer/viewer` |
 | API | `http://localhost:3000/api` | REST base path |
-| Swagger | `http://localhost:3000/api/docs` | OpenAPI testing surface |
+| Swagger | `http://localhost:3000/api/docs` | OpenAPI testing surface with request and response examples |
+| Swagger JSON | `http://localhost:3000/api/docs-json` | Raw generated OpenAPI document |
 | Camunda | `http://localhost:8080` | Login with `demo/demo` |
 | Adminer | `http://localhost:8081` | PostgreSQL database UI |
 | Prometheus | `http://localhost:9090` | Metrics query UI |
@@ -62,6 +63,7 @@ docker compose exec -T archive-db psql -U archive -d camunda_archive -c "select 
 - Completed Workflows: select unarchived completed instances and archive them.
 - Failed Workflows: select unarchived failed/deleted instances and archive them.
 - Archived Workflows: search archived rows and use `Re-sync` to move history back to Camunda.
+- Running, Completed, Failed, and Archived workflow lists show 10 records per page with Previous and Next controls.
 - Restore Workflow: re-sync a known archived process id with a reason and optional child inclusion.
 - Incident Monitoring: inspect Camunda incidents.
 - Cleanup Monitoring: review scheduler/archive run activity.
@@ -97,6 +99,8 @@ POST /api/archive/run/selected
 POST /api/restore/workflow
 POST /api/restore/workflows
 ```
+
+Use Swagger at `http://localhost:3000/api/docs` for manual testing. Authorize with the JWT returned by `POST /api/auth/login`, then use the documented archive and re-sync examples.
 
 ## Performance Guidance
 

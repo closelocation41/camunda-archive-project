@@ -2,6 +2,13 @@
 
 All endpoints are prefixed with `/api`.
 
+Interactive Swagger documentation is available at:
+
+- Swagger UI: `http://localhost:3000/api/docs`
+- OpenAPI JSON: `http://localhost:3000/api/docs-json`
+
+The generated OpenAPI document includes bearer authentication, operation summaries, request DTO examples, response examples, pagination parameters, selected archive endpoints, and single/batch re-sync endpoints.
+
 ## Authentication
 
 - `POST /auth/login`
@@ -31,6 +38,7 @@ Use cases:
 - Completed workflows: inspect finished instances and archive selected unarchived instances.
 - Failed workflows: inspect failed/deleted history and archive selected unarchived instances.
 - Detail view: inspect process, activity, and variable history.
+- The web UI displays running, completed, and failed workflow lists at 10 records per page.
 
 ## Archive
 
@@ -40,6 +48,16 @@ Use cases:
 - `POST /archive/run/failed`
 - `POST /archive/run/suspended`
 - `POST /archive/run/selected`
+
+These endpoints are documented in Swagger with examples for paged archive search, selected archive payloads, and archive run summaries.
+
+`GET /archive/workflows` supports pagination and filtering:
+
+```text
+GET /api/archive/workflows?page=1&limit=10&search=invoice&state=COMPLETED
+```
+
+The Archived Workflows UI uses `limit=10` and exposes Previous and Next controls.
 
 `POST /archive/run/selected` request:
 
@@ -69,6 +87,8 @@ Archive behavior:
 
 - `POST /restore/workflow`
 - `POST /restore/workflows`
+
+These endpoints are documented in Swagger as history re-sync APIs. They move archive rows back to Camunda history tables and remove the restored rows from archive tables; they do not start runtime process instances.
 
 `POST /restore/workflow` request:
 
