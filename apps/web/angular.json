@@ -15,7 +15,19 @@
             "browser": "src/main.ts",
             "polyfills": ["zone.js"],
             "tsConfig": "tsconfig.app.json",
-            "assets": ["src/assets"],
+            "assets": [
+              "src/assets",
+              {
+                "glob": "*.md",
+                "input": "../../docs",
+                "output": "assets/docs"
+              },
+              {
+                "glob": "README.md",
+                "input": "../..",
+                "output": "assets/docs"
+              }
+            ],
             "styles": ["src/styles.scss"]
           }
         },

@@ -25,8 +25,17 @@ import { ApiService } from './core/api.service';
           <a routerLink="/incidents" routerLinkActive="active">Incident Monitoring</a>
           <a routerLink="/restore" routerLinkActive="active">Restore Workflow</a>
           <a routerLink="/operations" routerLinkActive="active">Cleanup Monitoring</a>
+          <details class="nav-dropdown">
+            <summary>Documents</summary>
+            <a href="/assets/docs/README.md" target="_blank" rel="noreferrer">README</a>
+            <a href="/assets/docs/ARCHITECTURE.md" target="_blank" rel="noreferrer">Architecture</a>
+            <a href="/assets/docs/API.md" target="_blank" rel="noreferrer">API Guide</a>
+            <a href="/assets/docs/OPERATIONS.md" target="_blank" rel="noreferrer">Operations</a>
+            <a href="/assets/docs/RESTORE_DESIGN.md" target="_blank" rel="noreferrer">Re-sync Design</a>
+            <a href="http://localhost:3000/api/docs" target="_blank" rel="noreferrer">Swagger UI</a>
+            <a href="http://localhost:3000/api/docs-json" target="_blank" rel="noreferrer">Swagger JSON</a>
+          </details>
           <span class="nav-label">External Tools</span>
-          <a href="http://localhost:3000/api/docs" target="_blank" rel="noreferrer">API Docs</a>
           <a href="http://localhost:8080" target="_blank" rel="noreferrer">Camunda UI</a>
           <a href="http://localhost:3001" target="_blank" rel="noreferrer">Grafana</a>
           <a href="http://localhost:9090" target="_blank" rel="noreferrer">Prometheus</a>
@@ -106,6 +115,30 @@ import { ApiService } from './core/api.service';
         padding: 10px 12px;
         border-radius: 6px;
         color: #dbe8ec;
+      }
+
+      .nav-dropdown {
+        display: grid;
+        gap: 6px;
+      }
+
+      .nav-dropdown summary {
+        padding: 10px 12px;
+        border-radius: 6px;
+        color: #dbe8ec;
+        cursor: pointer;
+      }
+
+      .nav-dropdown summary:hover,
+      .nav-dropdown[open] summary {
+        background: #1c3941;
+        color: #ffffff;
+      }
+
+      .nav-dropdown a {
+        margin-left: 14px;
+        padding-block: 8px;
+        font-size: 14px;
       }
 
       nav a.active,
