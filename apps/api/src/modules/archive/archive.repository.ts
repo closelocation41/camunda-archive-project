@@ -112,6 +112,7 @@ export class ArchiveRepository {
 
     try {
       await archiveClient.query('begin');
+      await camundaClient.query('begin');
       for (const [source, target] of HISTORY_TABLES) {
         const { rows } = await camundaClient.query(`select * from ${source} where ${this.processFilter(source, false)}`, [processIds]);
         const targetColumns = await this.tableColumns(archiveClient, target);
@@ -130,9 +131,11 @@ export class ArchiveRepository {
       }
       await this.deleteHistory(camundaClient, processIds, false);
       await archiveClient.query('commit');
+      await camundaClient.query('commit');
       return archived;
     } catch (error) {
       await archiveClient.query('rollback');
+      await camundaClient.query('rollback');
       throw error;
     } finally {
       archiveClient.release();
