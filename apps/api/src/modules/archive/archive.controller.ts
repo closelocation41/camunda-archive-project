@@ -1,8 +1,9 @@
-import { Controller, Get, Param, Post, Query } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { Role } from '../auth/roles';
 import { ArchiveService } from './archive.service';
+import { ArchiveSelectedDto } from './dto/archive-selected.dto';
 import { ArchiveQueryDto } from './dto/archive-query.dto';
 
 @ApiTags('archive')
@@ -39,5 +40,11 @@ export class ArchiveController {
   @Roles(Role.Operator)
   archiveSuspended() {
     return this.archiveService.archive('SUSPENDED');
+  }
+
+  @Post('run/selected')
+  @Roles(Role.Operator)
+  archiveSelected(@Body() dto: ArchiveSelectedDto) {
+    return this.archiveService.archiveSelected(dto.mode, dto.processInstanceIds);
   }
 }

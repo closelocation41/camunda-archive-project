@@ -82,6 +82,21 @@ export class ArchiveRepository {
     return rows.map((row) => row.proc_inst_id_);
   }
 
+  async archivedStatus(processIds: string[]) {
+    if (!processIds.length) {
+      return new Map<string, boolean>();
+    }
+
+    const { rows } = await this.archiveDb.query<{ proc_inst_id_: string }>(
+      `select distinct proc_inst_id_
+       from arc_act_hi_procinst
+       where proc_inst_id_ = any($1) and soft_deleted_at is null`,
+      [processIds],
+    );
+    const archived = new Set(rows.map((row) => row.proc_inst_id_));
+    return new Map(processIds.map((id) => [id, archived.has(id)]));
+  }
+
   async copyHistory(processIds: string[], archiveRunId: string) {
     if (!processIds.length) {
       return 0;

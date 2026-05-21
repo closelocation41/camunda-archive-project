@@ -67,8 +67,16 @@ export class ApiService {
     return this.http.post<Record<string, unknown>>(`${this.baseUrl}/restore/workflow`, { processInstanceId, reason, includeChildren });
   }
 
+  restoreBatch(processInstanceIds: string[], reason: string, includeChildren: boolean) {
+    return this.http.post<Record<string, unknown>>(`${this.baseUrl}/restore/workflows`, { processInstanceIds, reason, includeChildren });
+  }
+
   runArchive(kind: 'completed' | 'failed' | 'suspended') {
     return this.http.post<Record<string, unknown>>(`${this.baseUrl}/archive/run/${kind}`, {});
+  }
+
+  archiveSelected(mode: 'COMPLETED' | 'FAILED', processInstanceIds: string[]) {
+    return this.http.post<Record<string, unknown>>(`${this.baseUrl}/archive/run/selected`, { mode, processInstanceIds });
   }
 
   runSchedulers() {

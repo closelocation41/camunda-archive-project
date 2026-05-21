@@ -46,6 +46,36 @@ export class ArchiveService {
     }
   }
 
+  async archiveSelected(mode: 'COMPLETED' | 'FAILED', processInstanceIds: string[]) {
+    const runId = await this.repository.createRun(`ARCHIVE_SELECTED_${mode}`);
+    const uniqueIds = [...new Set(processInstanceIds)];
+
+    try {
+      const status = await this.repository.archivedStatus(uniqueIds);
+      const unarchivedIds = uniqueIds.filter((id) => !status.get(id));
+      const expandedIds = await this.repository.expandWithChildren(unarchivedIds);
+      const archived = await this.repository.copyHistory(expandedIds, runId);
+      await this.repository.finishRun(runId, 'COMPLETED', {
+        selected: uniqueIds.length,
+        archived,
+        skipped: uniqueIds.length - unarchivedIds.length,
+        failed: 0,
+      });
+      return {
+        runId,
+        selected: uniqueIds.length,
+        skippedAlreadyArchived: uniqueIds.length - unarchivedIds.length,
+        expandedProcessCount: expandedIds.length,
+        archived,
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown selected archive failure';
+      this.logger.error(message);
+      await this.repository.finishRun(runId, 'FAILED', { selected: uniqueIds.length, archived: 0, skipped: 0, failed: 1 }, message);
+      throw error;
+    }
+  }
+
   private daysFor(mode: ArchiveMode) {
     if (mode === 'COMPLETED') {
       return this.config.get<number>('ARCHIVE_COMPLETED_OLDER_THAN_DAYS', 7);

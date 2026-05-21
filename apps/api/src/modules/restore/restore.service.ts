@@ -47,6 +47,14 @@ export class RestoreService {
     }
   }
 
+  async restoreBatch(processInstanceIds: string[], reason: string, includeChildren: boolean, requestedBy: string) {
+    const results = [];
+    for (const processInstanceId of [...new Set(processInstanceIds)]) {
+      results.push(await this.restore({ processInstanceId, reason, includeChildren }, requestedBy));
+    }
+    return { restoredCount: results.length, results };
+  }
+
   private async restoreSingle(processInstanceId: string, logId: string, reason: string) {
     const bundle = await this.archiveRepository.getArchiveBundle(processInstanceId);
     if (!bundle.process) {
