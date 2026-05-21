@@ -17,9 +17,11 @@ const HISTORY_TABLES = [
   ['act_hi_comment', 'arc_act_hi_comment'],
 ] as const;
 
+const ARCHIVE_METADATA_COLUMNS = new Set(['archived_at', 'archive_run_id', 'soft_deleted_at']);
+
 @Injectable()
 export class ArchiveRepository {
-  private readonly targetColumnCache = new Map<string, Set<string>>();
+  private readonly columnCache = new Map<string, Set<string>>();
 
   constructor(
     @Inject(ARCHIVE_DB) private readonly archiveDb: Pool,
@@ -111,10 +113,10 @@ export class ArchiveRepository {
     try {
       await archiveClient.query('begin');
       for (const [source, target] of HISTORY_TABLES) {
-        const { rows } = await camundaClient.query(`select * from ${source} where ${this.processFilter(source)}`, [processIds]);
-        const targetColumns = await this.archiveColumns(archiveClient, target);
+        const { rows } = await camundaClient.query(`select * from ${source} where ${this.processFilter(source, false)}`, [processIds]);
+        const targetColumns = await this.tableColumns(archiveClient, target);
         for (const row of rows) {
-          const columns = Object.keys(row).filter((column) => targetColumns.has(column));
+          const columns = this.insertableColumns(row, targetColumns);
           const values = columns.map((column) => row[column]);
           const placeholders = columns.map((_, index) => `$${index + 1}`);
           await archiveClient.query(
@@ -126,9 +128,52 @@ export class ArchiveRepository {
           archived += 1;
         }
       }
+      await this.deleteHistory(camundaClient, processIds, false);
       await archiveClient.query('commit');
       return archived;
     } catch (error) {
+      await archiveClient.query('rollback');
+      throw error;
+    } finally {
+      archiveClient.release();
+      camundaClient.release();
+    }
+  }
+
+  async restoreHistory(processIds: string[]) {
+    if (!processIds.length) {
+      return 0;
+    }
+
+    let restored = 0;
+    const archiveClient = await this.archiveDb.connect();
+    const camundaClient = await this.camundaDb.connect();
+
+    try {
+      await archiveClient.query('begin');
+      await camundaClient.query('begin');
+      for (const [target, source] of HISTORY_TABLES) {
+        const { rows } = await archiveClient.query(`select * from ${source} where ${this.processFilter(source, true)}`, [processIds]);
+        const targetColumns = await this.tableColumns(camundaClient, target);
+        for (const row of rows) {
+          const columns = this.insertableColumns(row, targetColumns);
+          const values = columns.map((column) => row[column]);
+          const placeholders = columns.map((_, index) => `$${index + 1}`);
+          await camundaClient.query(
+            `insert into ${target} (${columns.join(', ')})
+             values (${placeholders.join(', ')})
+             on conflict do nothing`,
+            values,
+          );
+          restored += 1;
+        }
+      }
+      await this.deleteHistory(archiveClient, processIds, true);
+      await camundaClient.query('commit');
+      await archiveClient.query('commit');
+      return restored;
+    } catch (error) {
+      await camundaClient.query('rollback');
       await archiveClient.query('rollback');
       throw error;
     } finally {
@@ -189,22 +234,42 @@ export class ArchiveRepository {
     };
   }
 
-  private processFilter(table: string) {
-    if (table === 'act_hi_job_log') {
+  private processFilter(table: string, archive: boolean) {
+    if (table.endsWith('act_hi_job_log')) {
       return 'process_instance_id_ = any($1)';
     }
-    if (table === 'act_ge_bytearray') {
+    if (table.endsWith('act_ge_bytearray')) {
+      const prefix = archive ? 'arc_' : '';
       return `id_ in (
-        select bytearray_id_ from act_hi_varinst where proc_inst_id_ = any($1) and bytearray_id_ is not null
-        union select bytearray_id_ from act_hi_detail where proc_inst_id_ = any($1) and bytearray_id_ is not null
-        union select job_exception_stack_id_ from act_hi_job_log where process_instance_id_ = any($1) and job_exception_stack_id_ is not null
+        select bytearray_id_ from ${prefix}act_hi_varinst where proc_inst_id_ = any($1) and bytearray_id_ is not null
+        union select bytearray_id_ from ${prefix}act_hi_detail where proc_inst_id_ = any($1) and bytearray_id_ is not null
+        union select job_exception_stack_id_ from ${prefix}act_hi_job_log where process_instance_id_ = any($1) and job_exception_stack_id_ is not null
       )`;
     }
     return 'proc_inst_id_ = any($1)';
   }
 
-  private async archiveColumns(client: PoolClient, tableName: string) {
-    const cached = this.targetColumnCache.get(tableName);
+  private insertableColumns(row: Record<string, unknown>, targetColumns: Set<string>) {
+    return Object.keys(row).filter((column) => targetColumns.has(column) && !ARCHIVE_METADATA_COLUMNS.has(column));
+  }
+
+  private async deleteHistory(client: PoolClient, processIds: string[], archive: boolean) {
+    const tables = archive ? HISTORY_TABLES.map(([, target]) => target) : HISTORY_TABLES.map(([source]) => source);
+    const procInstTable = archive ? 'arc_act_hi_procinst' : 'act_hi_procinst';
+    const byteArrayTable = archive ? 'arc_act_ge_bytearray' : 'act_ge_bytearray';
+    const deleteOrder = [
+      byteArrayTable,
+      ...tables.filter((table) => table !== byteArrayTable && table !== procInstTable),
+      procInstTable,
+    ];
+
+    for (const table of deleteOrder) {
+      await client.query(`delete from ${table} where ${this.processFilter(table, archive)}`, [processIds]);
+    }
+  }
+
+  private async tableColumns(client: PoolClient, tableName: string) {
+    const cached = this.columnCache.get(tableName);
     if (cached) {
       return cached;
     }
@@ -216,7 +281,7 @@ export class ArchiveRepository {
       [tableName],
     );
     const columns = new Set(rows.map((row) => row.column_name));
-    this.targetColumnCache.set(tableName, columns);
+    this.columnCache.set(tableName, columns);
     return columns;
   }
 }

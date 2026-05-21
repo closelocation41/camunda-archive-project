@@ -17,10 +17,13 @@ import { ApiService } from '../core/api.service';
         <option value="SUSPENDED">Suspended</option>
       </select>
       <button class="btn primary" (click)="load()">Search</button>
+      @if (message()) {
+        <strong>{{ message() }}</strong>
+      }
     </div>
     <section class="panel table-wrap">
       <table class="table">
-        <tr><th>Instance</th><th>Definition</th><th>Business Key</th><th>Started</th><th>Ended</th><th>Hierarchy</th></tr>
+        <tr><th>Instance</th><th>Definition</th><th>Business Key</th><th>Started</th><th>Ended</th><th>Hierarchy</th><th>Action</th></tr>
         @for (row of rows(); track row['proc_inst_id_']) {
           <tr>
             <td><a [routerLink]="['/workflow', row['proc_inst_id_']]">{{ row['proc_inst_id_'] }}</a></td>
@@ -29,6 +32,7 @@ import { ApiService } from '../core/api.service';
             <td>{{ row['start_time_'] }}</td>
             <td>{{ row['end_time_'] || '-' }}</td>
             <td>{{ row['super_process_instance_id_'] || row['root_proc_inst_id_'] || '-' }}</td>
+            <td><button class="btn" (click)="resync(row)">Re-sync</button></td>
           </tr>
         }
       </table>
@@ -51,6 +55,7 @@ import { ApiService } from '../core/api.service';
 })
 export class ArchivedWorkflowsPageComponent implements OnInit {
   rows = signal<Array<Record<string, unknown>>>([]);
+  message = signal('');
   search = '';
   state = '';
 
@@ -62,5 +67,17 @@ export class ArchivedWorkflowsPageComponent implements OnInit {
 
   load() {
     this.api.archived(this.search, this.state).subscribe((response) => this.rows.set(response.data));
+  }
+
+  resync(row: Record<string, unknown>) {
+    const processInstanceId = String(row['proc_inst_id_']);
+    this.message.set('Re-syncing...');
+    this.api.restore(processInstanceId, 'Operator requested re-sync from archived workflow list', true).subscribe({
+      next: () => {
+        this.message.set('Re-sync completed');
+        this.load();
+      },
+      error: () => this.message.set('Re-sync failed'),
+    });
   }
 }

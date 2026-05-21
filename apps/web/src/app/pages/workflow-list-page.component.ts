@@ -60,10 +60,12 @@ import { ApiService } from '../core/api.service';
             </td>
             <td class="row-actions">
               <a class="btn" [routerLink]="['/workflow', row['id']]">Open</a>
-              @if (row['archived']) {
-                <button class="btn" (click)="resyncOne(id(row))">Re-sync</button>
-              } @else {
-                <button class="btn primary" (click)="archiveOne(row)">Archive</button>
+              @if (isArchivableList()) {
+                @if (row['archived']) {
+                  <button class="btn" (click)="resyncOne(id(row))">Re-sync</button>
+                } @else {
+                  <button class="btn primary" (click)="archiveOne(row)">Archive</button>
+                }
               }
             </td>
           </tr>
