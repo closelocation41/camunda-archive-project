@@ -39,7 +39,7 @@ import { ApiService } from '../core/api.service';
           <th>Archive</th>
           <th>Action</th>
         </tr>
-        @for (row of rows(); track row['id']) {
+        @for (row of visibleRows(); track row['id']) {
           <tr>
             @if (isArchivableList()) {
               <td>
@@ -72,6 +72,11 @@ import { ApiService } from '../core/api.service';
         }
       </table>
     </section>
+    <div class="pagination">
+      <button class="btn" [disabled]="page() === 1" (click)="previousPage()">Previous</button>
+      <span>Page {{ page() }} of {{ totalPages() }}</span>
+      <button class="btn" [disabled]="page() === totalPages()" (click)="nextPage()">Next</button>
+    </div>
   `,
   styles: [
     `
@@ -108,11 +113,21 @@ import { ApiService } from '../core/api.service';
         background: #fff4e5;
         color: var(--warn);
       }
+
+      .pagination {
+        display: flex;
+        gap: 12px;
+        align-items: center;
+        justify-content: flex-end;
+        margin-top: 14px;
+      }
     `,
   ],
 })
 export class WorkflowListPageComponent implements OnInit {
+  readonly pageSize = 10;
   rows = signal<Array<Record<string, unknown>>>([]);
+  page = signal(1);
   title = signal('Workflows');
   kind = signal<'running' | 'completed' | 'failed'>('running');
   selected = signal<Set<string>>(new Set());
@@ -133,6 +148,7 @@ export class WorkflowListPageComponent implements OnInit {
 
   load() {
     this.selected.set(new Set());
+    this.page.set(1);
     this.api.workflows(this.kind()).subscribe((rows) => this.rows.set(rows));
   }
 
@@ -153,7 +169,7 @@ export class WorkflowListPageComponent implements OnInit {
   }
 
   allSelected() {
-    return this.rows().length > 0 && this.rows().every((row) => this.selected().has(this.id(row)));
+    return this.visibleRows().length > 0 && this.visibleRows().every((row) => this.selected().has(this.id(row)));
   }
 
   toggle(id: string, checked: boolean) {
@@ -163,7 +179,28 @@ export class WorkflowListPageComponent implements OnInit {
   }
 
   toggleAll(checked: boolean) {
-    this.selected.set(checked ? new Set(this.rows().map((row) => this.id(row))) : new Set());
+    const next = new Set(this.selected());
+    for (const row of this.visibleRows()) {
+      checked ? next.add(this.id(row)) : next.delete(this.id(row));
+    }
+    this.selected.set(next);
+  }
+
+  visibleRows() {
+    const start = (this.page() - 1) * this.pageSize;
+    return this.rows().slice(start, start + this.pageSize);
+  }
+
+  totalPages() {
+    return Math.max(1, Math.ceil(this.rows().length / this.pageSize));
+  }
+
+  previousPage() {
+    this.page.set(Math.max(1, this.page() - 1));
+  }
+
+  nextPage() {
+    this.page.set(Math.min(this.totalPages(), this.page() + 1));
   }
 
   archiveTargets() {

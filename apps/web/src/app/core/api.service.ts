@@ -40,8 +40,8 @@ export class ApiService {
     return this.http.get<Array<Record<string, unknown>>>(`${this.baseUrl}/workflows/${kind}`);
   }
 
-  archived(search = '', state = '') {
-    let params = new HttpParams().set('page', 1).set('limit', 100);
+  archived(search = '', state = '', page = 1, limit = 10) {
+    let params = new HttpParams().set('page', page).set('limit', limit);
     if (search) {
       params = params.set('search', search);
     }

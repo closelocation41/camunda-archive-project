@@ -25,6 +25,16 @@ import { ApiService } from './core/api.service';
           <a routerLink="/incidents" routerLinkActive="active">Incident Monitoring</a>
           <a routerLink="/restore" routerLinkActive="active">Restore Workflow</a>
           <a routerLink="/operations" routerLinkActive="active">Cleanup Monitoring</a>
+          <span class="nav-label">External Tools</span>
+          <a href="http://localhost:8080" target="_blank" rel="noreferrer">Camunda UI</a>
+          <a href="http://localhost:3001" target="_blank" rel="noreferrer">Grafana</a>
+          <a href="http://localhost:9090" target="_blank" rel="noreferrer">Prometheus</a>
+          <a href="http://localhost:8081/?pgsql=archive-db&username=archive&db=camunda_archive" target="_blank" rel="noreferrer">
+            Archive Database
+          </a>
+          <a href="http://localhost:8081/?pgsql=camunda-db&username=camunda&db=camunda" target="_blank" rel="noreferrer">
+            Camunda Database
+          </a>
         </nav>
       </aside>
       <main class="content">
@@ -80,6 +90,15 @@ import { ApiService } from './core/api.service';
       nav {
         display: grid;
         gap: 6px;
+      }
+
+      .nav-label {
+        margin: 18px 12px 4px;
+        color: #8fb0ba;
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 0;
+        text-transform: uppercase;
       }
 
       nav a {

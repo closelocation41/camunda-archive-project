@@ -16,7 +16,7 @@ import { ApiService } from '../core/api.service';
         <option value="FAILED">Failed</option>
         <option value="SUSPENDED">Suspended</option>
       </select>
-      <button class="btn primary" (click)="load()">Search</button>
+      <button class="btn primary" (click)="searchArchive()">Search</button>
       <label class="select-all">
         <input type="checkbox" [checked]="allSelected()" (change)="toggleAll($any($event.target).checked)" />
         Select all
@@ -46,6 +46,11 @@ import { ApiService } from '../core/api.service';
         }
       </table>
     </section>
+    <div class="pagination">
+      <button class="btn" [disabled]="page() === 1" (click)="previousPage()">Previous</button>
+      <span>Page {{ page() }} of {{ totalPages() }}</span>
+      <button class="btn" [disabled]="page() === totalPages()" (click)="nextPage()">Next</button>
+    </div>
   `,
   styles: [
     `
@@ -70,12 +75,23 @@ import { ApiService } from '../core/api.service';
         opacity: 0.45;
         cursor: not-allowed;
       }
+
+      .pagination {
+        display: flex;
+        gap: 12px;
+        align-items: center;
+        justify-content: flex-end;
+        margin-top: 14px;
+      }
     `,
   ],
 })
 export class ArchivedWorkflowsPageComponent implements OnInit {
+  readonly pageSize = 10;
   rows = signal<Array<Record<string, unknown>>>([]);
   selected = signal<Set<string>>(new Set());
+  total = signal(0);
+  page = signal(1);
   message = signal('');
   search = '';
   state = '';
@@ -88,7 +104,15 @@ export class ArchivedWorkflowsPageComponent implements OnInit {
 
   load() {
     this.selected.set(new Set());
-    this.api.archived(this.search, this.state).subscribe((response) => this.rows.set(response.data));
+    this.api.archived(this.search, this.state, this.page(), this.pageSize).subscribe((response) => {
+      this.rows.set(response.data);
+      this.total.set(response.total);
+    });
+  }
+
+  searchArchive() {
+    this.page.set(1);
+    this.load();
   }
 
   id(row: Record<string, unknown>) {
@@ -115,6 +139,20 @@ export class ArchivedWorkflowsPageComponent implements OnInit {
 
   toggleAll(checked: boolean) {
     this.selected.set(checked ? new Set(this.rows().map((row) => this.id(row))) : new Set());
+  }
+
+  totalPages() {
+    return Math.max(1, Math.ceil(this.total() / this.pageSize));
+  }
+
+  previousPage() {
+    this.page.set(Math.max(1, this.page() - 1));
+    this.load();
+  }
+
+  nextPage() {
+    this.page.set(Math.min(this.totalPages(), this.page() + 1));
+    this.load();
   }
 
   resync(row: Record<string, unknown>) {
