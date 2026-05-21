@@ -1,0 +1,44 @@
+{
+  "name": "camunda-external-history-archive",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Enterprise Camunda 7 external history archive and workflow management system.",
+  "workspaces": [
+    "apps/api",
+    "apps/web"
+  ],
+  "scripts": {
+    "dev": "concurrently \"npm run dev:api\" \"npm run dev:web\"",
+    "dev:api": "npm --workspace apps/api run start:dev",
+    "dev:web": "npm --workspace apps/web run start",
+    "build": "npm --workspace apps/api run build && npm --workspace apps/web run build",
+    "lint": "npm --workspace apps/api run lint && npm --workspace apps/web run lint",
+    "test": "npm --workspace apps/api run test && npm --workspace apps/web run test",
+    "docker:up": "docker compose up --build",
+    "docker:down": "docker compose down -v"
+  },
+  "overrides": {
+    "@angular/animations": "19.2.14",
+    "@angular/common": "19.2.14",
+    "@angular/compiler": "19.2.14",
+    "@angular/core": "19.2.14",
+    "@angular/forms": "19.2.14",
+    "@angular/platform-browser": "19.2.14",
+    "@angular/router": "19.2.14",
+    "@angular/build": "19.2.14",
+    "@angular/cli": "19.2.14",
+    "@angular/compiler-cli": "19.2.14",
+    "@nestjs/common": "10.4.15",
+    "@nestjs/core": "10.4.15",
+    "@nestjs/platform-express": "10.4.15",
+    "@nestjs/schedule": "4.1.2",
+    "@nestjs/swagger": "8.1.0",
+    "@nestjs/testing": "10.4.15"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  },
+  "engines": {
+    "node": ">=20.11.0"
+  }
+}
