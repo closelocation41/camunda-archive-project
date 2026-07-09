@@ -1,0 +1,9 @@
+<h1 class="page-title">Account</h1>
+<section class="panel login">
+  <label>Username <input [(ngModel)]="username" /></label>
+  <label>Password <input [(ngModel)]="password" type="password" /></label>
+  <button class="btn primary" (click)="login()">Sign in</button>
+  @if (message()) {
+    <p>{{ message() }}</p>
+  }
+</section>

@@ -1,0 +1,71 @@
+<h1 class="page-title">{{ title() }}</h1>
+@if (isArchivableList()) {
+  <div class="toolbar actions">
+    <label class="select-all">
+      <input type="checkbox" [checked]="allSelected()" (change)="toggleAll($any($event.target).checked)" />
+      Select all
+    </label>
+    <button class="btn primary" [disabled]="archiveTargets().length === 0" (click)="archiveSelected()">
+      Archive selected
+    </button>
+    <button class="btn" [disabled]="resyncTargets().length === 0" (click)="resyncSelected()">
+      Re-sync selected
+    </button>
+    <span>{{ selectedCount() }} selected</span>
+    @if (message()) {
+      <strong>{{ message() }}</strong>
+    }
+  </div>
+}
+<section class="panel table-wrap">
+  <table class="table">
+    <tr>
+      @if (isArchivableList()) {
+        <th></th>
+      }
+      <th>Instance</th>
+      <th>Definition</th>
+      <th>Business Key</th>
+      <th>Start</th>
+      <th>End</th>
+      <th>Archive</th>
+      <th>Action</th>
+    </tr>
+    @for (row of visibleRows(); track row['id']) {
+      <tr>
+        @if (isArchivableList()) {
+          <td>
+            <input type="checkbox" [checked]="isSelected(id(row))" (change)="toggle(id(row), $any($event.target).checked)" />
+          </td>
+        }
+        <td><a [routerLink]="['/workflow', row['id']]">{{ row['id'] }}</a></td>
+        <td>{{ row['processDefinitionKey'] || row['processDefinitionId'] }}</td>
+        <td>{{ row['businessKey'] || '-' }}</td>
+        <td>{{ row['startTime'] }}</td>
+        <td>{{ row['endTime'] || '-' }}</td>
+        <td>
+          @if (row['archived']) {
+            <span class="badge archived">Archived</span>
+          } @else {
+            <span class="badge pending">Not archived</span>
+          }
+        </td>
+        <td class="row-actions">
+          <a class="btn" [routerLink]="['/workflow', row['id']]">Open</a>
+          @if (isArchivableList()) {
+            @if (row['archived']) {
+              <button class="btn" (click)="resyncOne(id(row))">Re-sync</button>
+            } @else {
+              <button class="btn primary" (click)="archiveOne(row)">Archive</button>
+            }
+          }
+        </td>
+      </tr>
+    }
+  </table>
+</section>
+<div class="pagination">
+  <button class="btn" [disabled]="page() === 1" (click)="previousPage()">Previous</button>
+  <span>Page {{ page() }} of {{ totalPages() }}</span>
+  <button class="btn" [disabled]="page() === totalPages()" (click)="nextPage()">Next</button>
+</div>

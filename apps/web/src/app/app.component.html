@@ -1,0 +1,51 @@
+<div class="shell">
+  <aside class="sidebar">
+    <div class="brand">
+      <span class="mark">CA</span>
+      <div>
+        <strong>Camunda Archive</strong>
+        <small>Workflow Operations</small>
+      </div>
+    </div>
+    <nav>
+      <a routerLink="/dashboard" routerLinkActive="active">Dashboard</a>
+      <a routerLink="/workflows/running" routerLinkActive="active">Running Workflows</a>
+      <a routerLink="/workflows/completed" routerLinkActive="active">Completed Workflows</a>
+      <a routerLink="/workflows/failed" routerLinkActive="active">Failed Workflows</a>
+      <a routerLink="/archive" routerLinkActive="active">Archived Workflows</a>
+      <a routerLink="/incidents" routerLinkActive="active">Incident Monitoring</a>
+      <a routerLink="/restore" routerLinkActive="active">Restore Workflow</a>
+      <a routerLink="/operations" routerLinkActive="active">Job Scheduler</a>
+      <details class="nav-dropdown">
+        <summary>Documents</summary>
+        <a href="/assets/docs/README.md" target="_blank" rel="noreferrer">README</a>
+        <a href="/assets/docs/ARCHITECTURE.md" target="_blank" rel="noreferrer">Architecture</a>
+        <a href="/assets/docs/API.md" target="_blank" rel="noreferrer">API Guide</a>
+        <a href="/assets/docs/OPERATIONS.md" target="_blank" rel="noreferrer">Operations</a>
+        <a href="/assets/docs/RESTORE_DESIGN.md" target="_blank" rel="noreferrer">Re-sync Design</a>
+        <a href="http://localhost:3000/api/docs" target="_blank" rel="noreferrer">Swagger UI</a>
+        <a href="http://localhost:3000/api/docs-json" target="_blank" rel="noreferrer">Swagger JSON</a>
+      </details>
+      <span class="nav-label">External Tools</span>
+      <a href="http://localhost:8080" target="_blank" rel="noreferrer">Camunda UI</a>
+      <a href="http://localhost:3001" target="_blank" rel="noreferrer">Grafana</a>
+      <a href="http://localhost:9090" target="_blank" rel="noreferrer">Prometheus</a>
+      <a href="http://localhost:8081/?pgsql=archive-db&username=archive&db=camunda_archive" target="_blank" rel="noreferrer">
+        Archive Database
+      </a>
+      <a href="http://localhost:8081/?pgsql=camunda-db&username=camunda&db=camunda" target="_blank" rel="noreferrer">
+        Camunda Database
+      </a>
+    </nav>
+  </aside>
+  <main class="content">
+    <header>
+      <div>
+        <strong>{{ api.user()?.username || 'Not signed in' }}</strong>
+        <span>{{ api.user()?.roles?.join(', ') || 'Login required' }}</span>
+      </div>
+      <a class="btn" routerLink="/login">Account</a>
+    </header>
+    <router-outlet />
+  </main>
+</div>

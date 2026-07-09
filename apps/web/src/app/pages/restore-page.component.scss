@@ -1,0 +1,28 @@
+.form {
+  max-width: 760px;
+  display: grid;
+  gap: 14px;
+  padding: 18px;
+}
+
+label {
+  display: grid;
+  gap: 6px;
+  color: var(--muted);
+}
+
+.check {
+  display: flex;
+  align-items: center;
+}
+
+input,
+textarea {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 10px 12px;
+}
+
+textarea {
+  min-height: 110px;
+}

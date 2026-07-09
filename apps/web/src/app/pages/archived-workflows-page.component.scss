@@ -1,0 +1,29 @@
+input,
+select {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 10px 12px;
+}
+
+input {
+  min-width: min(440px, 100%);
+}
+
+.select-all {
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.btn[disabled] {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.pagination {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: flex-end;
+  margin-top: 14px;
+}

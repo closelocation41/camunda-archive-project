@@ -1,0 +1,238 @@
+<div class="page-head">
+  <div>
+    <h1 class="page-title">Job Scheduler</h1>
+    <p>Camunda 7 archive workflow orchestration</p>
+  </div>
+  <button class="btn primary" (click)="runAll()">Run Schedulers</button>
+</div>
+
+<section class="scheduler-grid">
+  <form class="panel job-form" (ngSubmit)="createJob()">
+    <div class="form-head">
+      <strong>Schedule Archive Job</strong>
+      <span class="badge">{{ form.processingMode }}</span>
+    </div>
+
+    <label>
+      Job type
+      <select name="jobType" [(ngModel)]="form.jobType" (change)="refreshEligibleCount()">
+        <option value="ARCHIVE_COMPLETED">Completed workflow archive</option>
+        <option value="ARCHIVE_FAILED">Failed workflow archive</option>
+        <option value="ARCHIVE_SUSPENDED">Suspended workflow archive</option>
+      </select>
+    </label>
+
+    <div class="form-row">
+      <label>
+        Workflow type
+        <select name="workflowType" [(ngModel)]="form.workflowType" (change)="refreshEligibleCount()">
+          <option value="COMPLETED_TO_ARCHIVE">Archive workflow to archive DB</option>
+          <option value="ARCHIVE_TO_COMPLETE">Restore archived workflow to Camunda</option>
+        </select>
+      </label>
+      <label>
+        Rule
+        <select name="rule" [(ngModel)]="form.rule" (change)="refreshEligibleCount()">
+          <option value="CURRENT">Current</option>
+          <option value="LAST_7_DAYS">Last 7 days</option>
+          <option value="LAST_30_DAYS">Last 30 days</option>
+          <option value="ALL">All</option>
+        </select>
+      </label>
+    </div>
+
+    <label>
+      Job name
+      <input name="jobName" [(ngModel)]="form.jobName" placeholder="Nightly completed archive" />
+    </label>
+
+    <div class="form-row">
+      <label>
+        Scheduler
+        <input name="scheduledStartTime" type="datetime-local" [(ngModel)]="form.scheduledStartTime" />
+      </label>
+      <label>
+        Status details count
+        <input name="selectedWorkflowCount" type="number" min="1" [max]="eligibleWorkflowCount() ?? 500" [(ngModel)]="form.selectedWorkflowCount" />
+        @if (eligibleWorkflowCount() !== null) {
+          <small class="hint" [class.danger]="!canCreateJob()">Eligible workflows for this rule: {{ eligibleWorkflowCount() }}</small>
+        }
+      </label>
+    </div>
+
+    <div class="segmented" role="group" aria-label="Processing mode">
+      <button type="button" [class.active]="form.processingMode === 'SEQUENTIAL'" (click)="form.processingMode = 'SEQUENTIAL'">Sequential</button>
+      <button type="button" [class.active]="form.processingMode === 'PARALLEL'" (click)="form.processingMode = 'PARALLEL'">Parallel</button>
+    </div>
+
+    <button class="btn primary wide" type="submit" [disabled]="!canCreateJob()">Create Job</button>
+  </form>
+
+  <section class="panel details-panel">
+    <div class="section-head">
+      <strong>Selected Job Details</strong>
+      <div class="toolbar">
+        <button class="btn toggle-btn" type="button" [class.active]="autoRefreshEnabled()" (click)="toggleAutoRefresh()">
+          {{ autoRefreshEnabled() ? 'Auto-refresh on' : 'Auto-refresh off' }}
+        </button>
+        <span class="badge" [class.live]="autoRefreshEnabled()">{{ autoRefreshEnabled() ? 'Live' : 'Paused' }}</span>
+      </div>
+    </div>
+
+    @if (selectedJob(); as job) {
+      <div class="details-shell">
+        <div class="details-overview">
+          <div class="detail-stat">
+            <span>Job</span>
+            <strong>{{ job.jobName }}</strong>
+          </div>
+          <div class="detail-stat">
+            <span>Status</span>
+            <strong class="status-value" [class.ok]="job.status === 'COMPLETED'" [class.warn]="job.status === 'PARTIAL'" [class.danger]="job.status === 'FAILED'">{{ job.status }}</strong>
+          </div>
+          <div class="detail-stat">
+            <span>Workflow</span>
+            <strong>{{ job.workflowType || 'COMPLETED_TO_ARCHIVE' }}</strong>
+          </div>
+          <div class="detail-stat">
+            <span>Rule</span>
+            <strong>{{ job.rule || 'CURRENT' }}</strong>
+          </div>
+        </div>
+
+        <div class="progress-card">
+          <div class="progress-meta">
+            <span>Progress</span>
+            <strong>{{ progress(job) }}%</strong>
+          </div>
+          <div class="meter large"><span [style.width.%]="progress(job)"></span></div>
+          <div class="counts large">
+            <span>{{ job.completedCount || 0 }} completed</span>
+            <span>{{ job.failedCount || 0 }} failed</span>
+            <span>{{ job.inProgressCount || 0 }} running</span>
+            <span>{{ job.pendingCount || 0 }} pending</span>
+          </div>
+        </div>
+
+        <div class="log-card">
+          <div class="card-header">
+            <strong>Recent logs</strong>
+            <span>{{ selectedJobLogs().length }} entries</span>
+          </div>
+          <div class="list-scroll">
+            <ul>
+              @for (log of selectedJobLogs(); track log['attemptNumber']) {
+                <li class="list-item">
+                  <div class="list-title">{{ log['status'] }} · attempt {{ log['attemptNumber'] }}</div>
+                  <div class="list-subtitle">{{ log['errorMessage'] || 'No errors reported.' }}</div>
+                </li>
+              } @empty {
+                <li class="empty-state">No logs yet.</li>
+              }
+            </ul>
+          </div>
+        </div>
+
+        <div class="log-card">
+          <div class="card-header">
+            <strong>Workflow items</strong>
+            <span>{{ selectedJobItems().length }} items</span>
+          </div>
+          <div class="list-scroll">
+            <ul>
+              @for (item of selectedJobItems(); track item['processInstanceId']) {
+                <li class="list-item">
+                  <div class="list-title">{{ item['processInstanceId'] }}</div>
+                  <div class="list-subtitle">{{ item['status'] }} · retries {{ item['retryCount'] }}</div>
+                </li>
+              } @empty {
+                <li class="empty-state">No workflow items yet.</li>
+              }
+            </ul>
+          </div>
+        </div>
+      </div>
+    } @else {
+      <div class="empty-state large">Select a job to view live progress and logs.</div>
+    }
+  </section>
+</section>
+
+<section class="stats">
+  <article class="panel"><span>Scheduled</span><strong>{{ countByStatus('SCHEDULED') }}</strong></article>
+  <article class="panel"><span>Running</span><strong>{{ countByStatus('RUNNING') }}</strong></article>
+  <article class="panel"><span>Completed</span><strong>{{ countByStatus('COMPLETED') }}</strong></article>
+  <article class="panel"><span>Failed</span><strong>{{ countByStatus('FAILED') }}</strong></article>
+  <article class="panel"><span>Canceled</span><strong>{{ countByStatus('CANCELED') }}</strong></article>
+</section>
+
+<section class="panel jobs">
+  <div class="section-head">
+    <strong>Scheduler Jobs</strong>
+    <button class="btn" (click)="load()">Refresh</button>
+  </div>
+  <div class="table-wrap">
+    <table class="table">
+      <tr>
+        <th>Job type</th>
+        <th>Job name</th>
+        <th>Scheduler</th>
+        <th>Mode</th>
+        <th>Status details count</th>
+        <th>Status</th>
+        <th></th>
+      </tr>
+      @for (job of jobs(); track job.id) {
+        <tr (click)="selectJob(job.id)" class="job-row">
+          <td><span class="type-chip">{{ label(job.jobType) }}</span></td>
+          <td>
+            <strong>{{ job.jobName }}</strong>
+            @if (job.lastErrorMessage) {
+              <small>{{ job.lastErrorMessage }}</small>
+            }
+          </td>
+          <td>{{ job.scheduledStartTime | date: 'medium' }}</td>
+          <td>{{ job.processingMode }}</td>
+          <td>
+            <div class="counts">
+              <span>{{ job.completedCount || 0 }} done</span>
+              <span>{{ job.inProgressCount || 0 }} active</span>
+              <span>{{ job.failedCount || 0 }} failed</span>
+              <span>{{ job.pendingCount || 0 }} pending</span>
+            </div>
+            <div class="meter"><span [style.width.%]="progress(job)"></span></div>
+          </td>
+          <td><span class="badge" [class.warn]="job.status === 'PARTIAL'" [class.danger]="job.status === 'FAILED'" [class.ok]="job.status === 'COMPLETED'">{{ job.status }}</span></td>
+          <td class="actions" (click)="$event.stopPropagation()">
+            <button class="icon-action run-action" type="button" aria-label="Run job" title="Run job" data-tooltip="Run" (click)="runJob(job)">
+              <span aria-hidden="true">▶</span>
+            </button>
+            <button class="icon-action retry-action" type="button" aria-label="Retry job" title="Retry job" data-tooltip="Retry" (click)="retryJob(job)">
+              <span aria-hidden="true">↵</span>
+            </button>
+            @if (job.status === 'RUNNING' || job.status === 'SCHEDULED') {
+              <button class="icon-action cancel-action" type="button" aria-label="Cancel job" title="Cancel job" data-tooltip="Cancel" (click)="cancelJob(job)">
+                <span aria-hidden="true">✕</span>
+              </button>
+            }
+            <button class="icon-action delete-action" type="button" aria-label="Delete job" title="Delete job" data-tooltip="Delete" (click)="deleteJob(job)">
+              <span aria-hidden="true">🗥</span>
+            </button>
+          </td>
+        </tr>
+      } @empty {
+        <tr><td colspan="7" class="empty">No scheduler jobs yet.</td></tr>
+      }
+    </table>
+  </div>
+  <div class="pager">
+    <button class="btn" [disabled]="page() <= 1" (click)="changePage(page() - 1)">Previous</button>
+    <span>Page {{ page() }} / {{ totalPages() }}</span>
+    <button class="btn" [disabled]="page() >= totalPages()" (click)="changePage(page() + 1)">Next</button>
+  </div>
+</section>
+
+<section class="panel output">
+  <strong>Last Operation</strong>
+  <pre>{{ result() | json }}</pre>
+</section>

@@ -1,0 +1,27 @@
+<h1 class="page-title">Workflow Timeline Viewer</h1>
+@if (bundle(); as data) {
+  <section class="detail-grid">
+    <article class="panel block">
+      <h2>BPMN Execution</h2>
+      <pre>{{ bpmn()?.['bpmnXml'] || 'BPMN XML unavailable for this archived process definition.' }}</pre>
+    </article>
+    <article class="panel block">
+      <h2>Parent-Child Workflow Viewer</h2>
+      <p><strong>Root:</strong> {{ process(data)?.['root_proc_inst_id_'] || '-' }}</p>
+      <p><strong>Parent:</strong> {{ process(data)?.['super_process_instance_id_'] || '-' }}</p>
+      <p><strong>Definition:</strong> {{ process(data)?.['proc_def_key_'] || '-' }}</p>
+    </article>
+  </section>
+  <section class="panel block">
+    <h2>Execution Timeline</h2>
+    <div class="timeline">
+      @for (activity of activities(data); track activity['id_']) {
+        <div [class.failed]="isFailed(activity)">
+          <span></span>
+          <strong>{{ activity['act_name_'] || activity['act_id_'] }}</strong>
+          <small>{{ activity['act_type_'] }} · {{ activity['start_time_'] }} → {{ activity['end_time_'] || 'open' }}</small>
+        </div>
+      }
+    </div>
+  </section>
+}

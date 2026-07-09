@@ -1,0 +1,10 @@
+<h1 class="page-title">Restore Workflow Page</h1>
+<section class="panel form">
+  <label>Original process instance ID <input [(ngModel)]="processInstanceId" /></label>
+  <label>Restore reason <textarea [(ngModel)]="reason"></textarea></label>
+  <label class="check"><input type="checkbox" [(ngModel)]="includeChildren" /> Restore child workflows</label>
+  <button class="btn primary" (click)="restore()">Restore</button>
+  @if (result(); as value) {
+    <pre>{{ value | json }}</pre>
+  }
+</section>
