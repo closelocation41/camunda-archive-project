@@ -1,0 +1,122 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" xmlns:camunda="http://camunda.org/schema/1.0/bpmn" id="Definitions_completed_task_move_to_archive" targetNamespace="http://camunda.org/archive">
+  <bpmn:process id="completed_task_move_to_archive" name="Completed Task Move To Archive" isExecutable="true">
+    <bpmn:extensionElements>
+      <camunda:properties>
+        <camunda:property name="version" value="camunda-7" />
+        <camunda:property name="orchestration" value="archive-completed-history" />
+      </camunda:properties>
+    </bpmn:extensionElements>
+    <bpmn:startEvent id="StartEvent_ArchiveJobDue" name="Archive job due">
+      <bpmn:outgoing>Flow_Start_Select</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:serviceTask id="ServiceTask_SelectEligible" name="Select eligible completed workflows" camunda:type="external" camunda:topic="archive.selectEligibleCompleted">
+      <bpmn:incoming>Flow_Start_Select</bpmn:incoming>
+      <bpmn:outgoing>Flow_Select_HasItems</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:exclusiveGateway id="Gateway_HasItems" name="Workflows found?">
+      <bpmn:incoming>Flow_Select_HasItems</bpmn:incoming>
+      <bpmn:outgoing>Flow_HasItems_PrepareItem</bpmn:outgoing>
+      <bpmn:outgoing>Flow_NoItems_Complete</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:serviceTask id="ServiceTask_PrepareItem" name="Prepare next workflow item" camunda:type="external" camunda:topic="archive.prepareNextItem">
+      <bpmn:incoming>Flow_HasItems_PrepareItem</bpmn:incoming>
+      <bpmn:incoming>Flow_MoreItems_PrepareItem</bpmn:incoming>
+      <bpmn:outgoing>Flow_Prepare_Verify</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:serviceTask id="ServiceTask_VerifyCompleted" name="Verify workflow and tasks completed" camunda:type="external" camunda:topic="archive.verifyCompleted">
+      <bpmn:incoming>Flow_Prepare_Verify</bpmn:incoming>
+      <bpmn:outgoing>Flow_Verify_Copy</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:boundaryEvent id="Boundary_VerifyFailure" attachedToRef="ServiceTask_VerifyCompleted">
+      <bpmn:outgoing>Flow_VerifyFailure_MarkFailed</bpmn:outgoing>
+      <bpmn:errorEventDefinition />
+    </bpmn:boundaryEvent>
+    <bpmn:serviceTask id="ServiceTask_CopyHistory" name="Copy Camunda history to archive DB" camunda:type="external" camunda:topic="archive.copyHistory">
+      <bpmn:incoming>Flow_Verify_Copy</bpmn:incoming>
+      <bpmn:outgoing>Flow_Copy_Validate</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:boundaryEvent id="Boundary_CopyFailure" attachedToRef="ServiceTask_CopyHistory">
+      <bpmn:outgoing>Flow_CopyFailure_MarkFailed</bpmn:outgoing>
+      <bpmn:errorEventDefinition />
+    </bpmn:boundaryEvent>
+    <bpmn:serviceTask id="ServiceTask_ValidateMove" name="Validate archive data movement" camunda:type="external" camunda:topic="archive.validateMove">
+      <bpmn:incoming>Flow_Copy_Validate</bpmn:incoming>
+      <bpmn:outgoing>Flow_Validate_MarkArchived</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:boundaryEvent id="Boundary_ValidateFailure" attachedToRef="ServiceTask_ValidateMove">
+      <bpmn:outgoing>Flow_ValidateFailure_MarkFailed</bpmn:outgoing>
+      <bpmn:errorEventDefinition />
+    </bpmn:boundaryEvent>
+    <bpmn:serviceTask id="ServiceTask_MarkArchived" name="Mark workflow archived" camunda:type="external" camunda:topic="archive.markArchived">
+      <bpmn:incoming>Flow_Validate_MarkArchived</bpmn:incoming>
+      <bpmn:outgoing>Flow_MarkArchived_UpdateProgress</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:serviceTask id="ServiceTask_MarkFailed" name="Mark item failed and store retry" camunda:type="external" camunda:topic="archive.markItemFailed">
+      <bpmn:incoming>Flow_VerifyFailure_MarkFailed</bpmn:incoming>
+      <bpmn:incoming>Flow_CopyFailure_MarkFailed</bpmn:incoming>
+      <bpmn:incoming>Flow_ValidateFailure_MarkFailed</bpmn:incoming>
+      <bpmn:outgoing>Flow_MarkFailed_UpdateProgress</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:serviceTask id="ServiceTask_UpdateProgress" name="Update job progress counts" camunda:type="external" camunda:topic="archive.updateProgress">
+      <bpmn:incoming>Flow_MarkArchived_UpdateProgress</bpmn:incoming>
+      <bpmn:incoming>Flow_MarkFailed_UpdateProgress</bpmn:incoming>
+      <bpmn:outgoing>Flow_UpdateProgress_MoreItems</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:exclusiveGateway id="Gateway_MoreItems" name="More workflow items?">
+      <bpmn:incoming>Flow_UpdateProgress_MoreItems</bpmn:incoming>
+      <bpmn:outgoing>Flow_MoreItems_PrepareItem</bpmn:outgoing>
+      <bpmn:outgoing>Flow_NoMoreItems_Finalize</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:serviceTask id="ServiceTask_FinalizeArchiveJob" name="Finalize archive job" camunda:type="external" camunda:topic="archive.finalizeJob">
+      <bpmn:incoming>Flow_NoMoreItems_Finalize</bpmn:incoming>
+      <bpmn:incoming>Flow_NoItems_Complete</bpmn:incoming>
+      <bpmn:outgoing>Flow_Finalize_End</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:endEvent id="EndEvent_ArchiveComplete" name="Archive job complete">
+      <bpmn:incoming>Flow_Finalize_End</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:sequenceFlow id="Flow_Start_Select" sourceRef="StartEvent_ArchiveJobDue" targetRef="ServiceTask_SelectEligible" />
+    <bpmn:sequenceFlow id="Flow_Select_HasItems" sourceRef="ServiceTask_SelectEligible" targetRef="Gateway_HasItems" />
+    <bpmn:sequenceFlow id="Flow_HasItems_PrepareItem" sourceRef="Gateway_HasItems" targetRef="ServiceTask_PrepareItem">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">${selectedWorkflowCount &gt; 0}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_NoItems_Complete" sourceRef="Gateway_HasItems" targetRef="ServiceTask_FinalizeArchiveJob">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">${selectedWorkflowCount == 0}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_Prepare_Verify" sourceRef="ServiceTask_PrepareItem" targetRef="ServiceTask_VerifyCompleted" />
+    <bpmn:sequenceFlow id="Flow_Verify_Copy" sourceRef="ServiceTask_VerifyCompleted" targetRef="ServiceTask_CopyHistory" />
+    <bpmn:sequenceFlow id="Flow_Copy_Validate" sourceRef="ServiceTask_CopyHistory" targetRef="ServiceTask_ValidateMove" />
+    <bpmn:sequenceFlow id="Flow_Validate_MarkArchived" sourceRef="ServiceTask_ValidateMove" targetRef="ServiceTask_MarkArchived" />
+    <bpmn:sequenceFlow id="Flow_VerifyFailure_MarkFailed" sourceRef="Boundary_VerifyFailure" targetRef="ServiceTask_MarkFailed" />
+    <bpmn:sequenceFlow id="Flow_CopyFailure_MarkFailed" sourceRef="Boundary_CopyFailure" targetRef="ServiceTask_MarkFailed" />
+    <bpmn:sequenceFlow id="Flow_ValidateFailure_MarkFailed" sourceRef="Boundary_ValidateFailure" targetRef="ServiceTask_MarkFailed" />
+    <bpmn:sequenceFlow id="Flow_MarkArchived_UpdateProgress" sourceRef="ServiceTask_MarkArchived" targetRef="ServiceTask_UpdateProgress" />
+    <bpmn:sequenceFlow id="Flow_MarkFailed_UpdateProgress" sourceRef="ServiceTask_MarkFailed" targetRef="ServiceTask_UpdateProgress" />
+    <bpmn:sequenceFlow id="Flow_UpdateProgress_MoreItems" sourceRef="ServiceTask_UpdateProgress" targetRef="Gateway_MoreItems" />
+    <bpmn:sequenceFlow id="Flow_MoreItems_PrepareItem" sourceRef="Gateway_MoreItems" targetRef="ServiceTask_PrepareItem">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">${pendingCount &gt; 0}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_NoMoreItems_Finalize" sourceRef="Gateway_MoreItems" targetRef="ServiceTask_FinalizeArchiveJob">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">${pendingCount == 0}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_Finalize_End" sourceRef="ServiceTask_FinalizeArchiveJob" targetRef="EndEvent_ArchiveComplete" />
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_completed_task_move_to_archive">
+    <bpmndi:BPMNPlane id="BPMNPlane_completed_task_move_to_archive" bpmnElement="completed_task_move_to_archive">
+      <bpmndi:BPMNShape id="StartEvent_ArchiveJobDue_di" bpmnElement="StartEvent_ArchiveJobDue"><dc:Bounds x="150" y="180" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="ServiceTask_SelectEligible_di" bpmnElement="ServiceTask_SelectEligible"><dc:Bounds x="230" y="158" width="150" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gateway_HasItems_di" bpmnElement="Gateway_HasItems" isMarkerVisible="true"><dc:Bounds x="430" y="173" width="50" height="50" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="ServiceTask_PrepareItem_di" bpmnElement="ServiceTask_PrepareItem"><dc:Bounds x="530" y="158" width="150" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="ServiceTask_VerifyCompleted_di" bpmnElement="ServiceTask_VerifyCompleted"><dc:Bounds x="730" y="158" width="150" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="ServiceTask_CopyHistory_di" bpmnElement="ServiceTask_CopyHistory"><dc:Bounds x="930" y="158" width="150" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="ServiceTask_ValidateMove_di" bpmnElement="ServiceTask_ValidateMove"><dc:Bounds x="1130" y="158" width="150" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="ServiceTask_MarkArchived_di" bpmnElement="ServiceTask_MarkArchived"><dc:Bounds x="1330" y="158" width="150" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="ServiceTask_MarkFailed_di" bpmnElement="ServiceTask_MarkFailed"><dc:Bounds x="930" y="310" width="150" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="ServiceTask_UpdateProgress_di" bpmnElement="ServiceTask_UpdateProgress"><dc:Bounds x="1530" y="158" width="150" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gateway_MoreItems_di" bpmnElement="Gateway_MoreItems" isMarkerVisible="true"><dc:Bounds x="1730" y="173" width="50" height="50" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="ServiceTask_FinalizeArchiveJob_di" bpmnElement="ServiceTask_FinalizeArchiveJob"><dc:Bounds x="1840" y="158" width="150" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="EndEvent_ArchiveComplete_di" bpmnElement="EndEvent_ArchiveComplete"><dc:Bounds x="2040" y="180" width="36" height="36" /></bpmndi:BPMNShape>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

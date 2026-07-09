@@ -86,6 +86,131 @@ export class ArchiveRepository {
     return rows.map((row) => row.proc_inst_id_);
   }
 
+  async countSchedulerProcessIds(state: 'COMPLETED' | 'FAILED' | 'SUSPENDED', rule: 'CURRENT' | 'LAST_7_DAYS' | 'LAST_30_DAYS' | 'ALL') {
+    const stateFilter =
+      state === 'COMPLETED'
+        ? "end_time_ is not null and delete_reason_ is null"
+        : state === 'FAILED'
+          ? "end_time_ is not null and delete_reason_ is not null"
+          : "state_ = 'SUSPENDED' and end_time_ is null";
+    const timeFilter = this.ruleTimeFilter(rule, 'coalesce(end_time_, start_time_)');
+    const { rows } = await this.camundaDb.query<{ count: string }>(
+      `select count(*)::text as count
+       from act_hi_procinst
+       where ${stateFilter}
+         ${timeFilter}`,
+    );
+    return Number(rows[0]?.count ?? 0);
+  }
+
+  async findSchedulerProcessIds(state: 'COMPLETED' | 'FAILED' | 'SUSPENDED', rule: 'CURRENT' | 'LAST_7_DAYS' | 'LAST_30_DAYS' | 'ALL', limit: number) {
+    const stateFilter =
+      state === 'COMPLETED'
+        ? "end_time_ is not null and delete_reason_ is null"
+        : state === 'FAILED'
+          ? "end_time_ is not null and delete_reason_ is not null"
+          : "state_ = 'SUSPENDED' and end_time_ is null";
+    const timeFilter = this.ruleTimeFilter(rule, 'coalesce(end_time_, start_time_)');
+
+    const { rows } = await this.camundaDb.query<{ proc_inst_id_: string }>(
+      `select proc_inst_id_
+       from act_hi_procinst
+       where ${stateFilter}
+         ${timeFilter}
+       order by coalesce(end_time_, start_time_) desc
+       limit $1`,
+      [limit],
+    );
+    return rows.map((row) => row.proc_inst_id_);
+  }
+
+  async countArchivedProcessIds(rule: 'CURRENT' | 'LAST_7_DAYS' | 'LAST_30_DAYS' | 'ALL') {
+    const timeFilter = this.ruleTimeFilter(rule, 'archived_at');
+    const { rows } = await this.archiveDb.query<{ count: string }>(
+      `select count(*)::text as count
+       from arc_act_hi_procinst
+       where soft_deleted_at is null
+         ${timeFilter}`,
+    );
+    return Number(rows[0]?.count ?? 0);
+  }
+
+  async findArchivedProcessIds(rule: 'CURRENT' | 'LAST_7_DAYS' | 'LAST_30_DAYS' | 'ALL', limit: number) {
+    const timeFilter = this.ruleTimeFilter(rule, 'archived_at');
+    const { rows } = await this.archiveDb.query<{ proc_inst_id_: string }>(
+      `select proc_inst_id_
+       from arc_act_hi_procinst
+       where soft_deleted_at is null
+         ${timeFilter}
+       order by archived_at desc
+       limit $1`,
+      [limit],
+    );
+    return rows.map((row) => row.proc_inst_id_);
+  }
+
+  async filterIndependentProcessIds(processIds: string[]) {
+    if (!processIds.length) {
+      return [];
+    }
+
+    const { rows } = await this.camundaDb.query<{ proc_inst_id_: string }>(
+      `with recursive ancestors as (
+         select child.proc_inst_id_, parent.proc_inst_id_ as ancestor_id_
+         from act_hi_procinst child
+         join act_hi_procinst parent on child.super_process_instance_id_ = parent.proc_inst_id_
+         where child.proc_inst_id_ = any($1)
+         union all
+         select ancestors.proc_inst_id_, parent.proc_inst_id_ as ancestor_id_
+         from ancestors
+         join act_hi_procinst child on child.proc_inst_id_ = ancestors.ancestor_id_
+         join act_hi_procinst parent on child.super_process_instance_id_ = parent.proc_inst_id_
+       )
+       select candidate.proc_inst_id_
+       from unnest($1::varchar[]) with ordinality as candidate(proc_inst_id_, sort_order)
+       where not exists (
+         select 1
+         from ancestors
+         where ancestors.proc_inst_id_ = candidate.proc_inst_id_
+           and ancestors.ancestor_id_ = any($1)
+       )
+       order by candidate.sort_order`,
+      [processIds],
+    );
+    return rows.map((row) => row.proc_inst_id_);
+  }
+
+  async filterIndependentArchivedProcessIds(processIds: string[]) {
+    if (!processIds.length) {
+      return [];
+    }
+
+    const { rows } = await this.archiveDb.query<{ proc_inst_id_: string }>(
+      `with recursive ancestors as (
+         select child.proc_inst_id_, parent.proc_inst_id_ as ancestor_id_
+         from arc_act_hi_procinst child
+         join arc_act_hi_procinst parent on child.super_process_instance_id_ = parent.proc_inst_id_
+         where child.proc_inst_id_ = any($1)
+         union all
+         select ancestors.proc_inst_id_, parent.proc_inst_id_ as ancestor_id_
+         from ancestors
+         join arc_act_hi_procinst child on child.proc_inst_id_ = ancestors.ancestor_id_
+         join arc_act_hi_procinst parent on child.super_process_instance_id_ = parent.proc_inst_id_
+       )
+       select candidate.proc_inst_id_
+       from unnest($1::varchar[]) with ordinality as candidate(proc_inst_id_, sort_order)
+       where not exists (
+         select 1
+         from ancestors
+         where ancestors.proc_inst_id_ = candidate.proc_inst_id_
+           and ancestors.ancestor_id_ = any($1)
+       )
+       order by candidate.sort_order`,
+      [processIds],
+    );
+    return rows.map((row) => row.proc_inst_id_);
+  }
+
   async archivedStatus(processIds: string[]) {
     if (!processIds.length) {
       return new Map<string, boolean>();
@@ -99,6 +224,74 @@ export class ArchiveRepository {
     );
     const archived = new Set(rows.map((row) => row.proc_inst_id_));
     return new Map(processIds.map((id) => [id, archived.has(id)]));
+  }
+
+  async verifyWorkflowReadyForRestore(processIds: string[]) {
+    if (!processIds.length) {
+      return { ready: false, reason: 'No archived workflow ids were selected for restore.' };
+    }
+
+    const processCheck = await this.archiveDb.query<{ total_count: string; missing_count: string }>(
+      `select count(*)::text as total_count,
+              count(*) filter (where proc_inst_id_ is null)::text as missing_count
+       from arc_act_hi_procinst
+       where proc_inst_id_ = any($1)`,
+      [processIds],
+    );
+
+    const total = Number(processCheck.rows[0]?.total_count ?? 0);
+    if (total !== processIds.length) {
+      return { ready: false, reason: 'Archived workflow history is missing for one or more selected workflows.' };
+    }
+
+    return { ready: true };
+  }
+
+  async verifyWorkflowReadyForArchive(processIds: string[], mode: 'COMPLETED' | 'FAILED' | 'SUSPENDED') {
+    if (!processIds.length) {
+      return { ready: false, reason: 'No workflow ids were selected for archive.' };
+    }
+
+    const processCheck = await this.camundaDb.query<{ invalid_count: string; total_count: string }>(
+      `select
+         count(*)::text as total_count,
+         count(*) filter (
+           where not (
+             case
+               when $2 = 'COMPLETED' then end_time_ is not null and delete_reason_ is null
+               when $2 = 'FAILED' then end_time_ is not null and delete_reason_ is not null
+               when $2 = 'SUSPENDED' then state_ = 'SUSPENDED' and end_time_ is null
+               else false
+             end
+           )
+         )::text as invalid_count
+       from act_hi_procinst
+       where proc_inst_id_ = any($1)`,
+      [processIds, mode],
+    );
+
+    const total = Number(processCheck.rows[0]?.total_count ?? 0);
+    const invalid = Number(processCheck.rows[0]?.invalid_count ?? 0);
+    if (total !== processIds.length) {
+      return { ready: false, reason: 'Parent or child workflow history is missing in Camunda.' };
+    }
+    if (invalid > 0) {
+      return { ready: false, reason: `Workflow tree is not ready for ${mode.toLowerCase()} archive.` };
+    }
+
+    if (mode === 'COMPLETED') {
+      const tasks = await this.camundaDb.query<{ open_count: string }>(
+        `select count(*)::text as open_count
+         from act_hi_taskinst
+         where proc_inst_id_ = any($1) and end_time_ is null`,
+        [processIds],
+      );
+      if (Number(tasks.rows[0]?.open_count ?? 0) > 0) {
+        return { ready: false, reason: 'Workflow tree still has unfinished task history.' };
+      }
+    }
+
+    return { ready: true };
   }
 
   async copyHistory(processIds: string[], archiveRunId: string) {
@@ -286,5 +479,15 @@ export class ArchiveRepository {
     const columns = new Set(rows.map((row) => row.column_name));
     this.columnCache.set(tableName, columns);
     return columns;
+  }
+
+  private ruleTimeFilter(rule: 'CURRENT' | 'LAST_7_DAYS' | 'LAST_30_DAYS' | 'ALL', column: string) {
+    if (rule === 'LAST_7_DAYS') {
+      return `and ${column} >= now() - interval '7 days'`;
+    }
+    if (rule === 'LAST_30_DAYS') {
+      return `and ${column} >= now() - interval '30 days'`;
+    }
+    return '';
   }
 }

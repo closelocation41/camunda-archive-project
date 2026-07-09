@@ -1,0 +1,44 @@
+External permanent archive for ACT_HI_* history tables in Camunda 7
+
+---------------------------
+mapping 
+extra flag 
+common relationship - in history tables or ref id
+----------------------------------
+Filter data -
+-
+scheduler / batch processing
+(Node js/ Saga / Camunda workflow)
+
+start -> filter date Wise -> show archive data count -> confirm with user before move to archive? -> 
+
+
+api-> K6 -> monitoring tools 
+
+Data will 
+----------------------------------
+
+is we are using anywhere 
+
+
+analysis camunda api listing running task /complete task / 
+analysis how to resync camunda tables
+analysis how manay tables need to required for archive data
+date range need to implements 
+sheduler chunks, any kin4d of failer handle grace fully
+make sure all table move properly if any of data pending due to internet issue, performance,use workflow 
+or create a workflow for 
+create a workflow for completed workflow to archive  
+based on sheduler job handle properly error all dependancy workflow 
+create a workflow archive task move to original camunda
+handle foults tolerances
+identity anywhere using 
+
+
+
+
+
+
+
+
+

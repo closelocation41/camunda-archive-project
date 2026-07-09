@@ -9,6 +9,33 @@ export interface DashboardSummary {
   cleanupStatistics: Array<Record<string, unknown>>;
 }
 
+export interface SchedulerJob {
+  id: string;
+  jobType: 'ARCHIVE_COMPLETED' | 'ARCHIVE_FAILED' | 'ARCHIVE_SUSPENDED';
+  workflowType?: 'COMPLETED_TO_ARCHIVE' | 'ARCHIVE_TO_COMPLETE';
+  rule?: 'CURRENT' | 'LAST_7_DAYS' | 'LAST_30_DAYS' | 'ALL';
+  jobName: string;
+  scheduledStartTime: string;
+  selectedWorkflowCount: number;
+  processingMode: 'SEQUENTIAL' | 'PARALLEL';
+  status: 'SCHEDULED' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'PARTIAL' | 'CANCELED';
+  completedCount: number;
+  failedCount: number;
+  inProgressCount: number;
+  pendingCount: number;
+  retryCount: number;
+  eligibleWorkflowCount?: number;
+  lastErrorMessage?: string;
+  percentageCompleted?: number;
+}
+
+export interface SchedulerJobsResponse {
+  data: SchedulerJob[];
+  total: number;
+  page: number;
+  limit: number;
+}
+
 @Injectable({ providedIn: 'root' })
 export class ApiService {
   private readonly baseUrl = '/api';
@@ -81,6 +108,54 @@ export class ApiService {
 
   runSchedulers() {
     return this.http.post<Record<string, unknown>>(`${this.baseUrl}/scheduler/run-all`, {});
+  }
+
+  schedulerJobs(page = 1, limit = 5) {
+    return this.http.get<SchedulerJobsResponse | SchedulerJob[]>(`${this.baseUrl}/scheduler/jobs`, { params: { page, limit } });
+  }
+
+  schedulerJob(id: string) {
+    return this.http.get<SchedulerJob & { items: Array<Record<string, unknown>>; logs: Array<Record<string, unknown>> }>(`${this.baseUrl}/scheduler/jobs/${id}`);
+  }
+
+  createSchedulerJob(payload: {
+    jobType: SchedulerJob['jobType'];
+    workflowType?: SchedulerJob['workflowType'];
+    rule?: SchedulerJob['rule'];
+    jobName: string;
+    scheduledStartTime: string;
+    selectedWorkflowCount: number;
+    processingMode: SchedulerJob['processingMode'];
+  }) {
+    return this.http.post<SchedulerJob>(`${this.baseUrl}/scheduler/jobs`, payload);
+  }
+
+  runSchedulerJob(id: string) {
+    return this.http.post<Record<string, unknown>>(`${this.baseUrl}/scheduler/jobs/${id}/run`, {});
+  }
+
+  retrySchedulerJob(id: string) {
+    return this.http.post<Record<string, unknown>>(`${this.baseUrl}/scheduler/jobs/${id}/retry`, {});
+  }
+
+  cancelSchedulerJob(id: string) {
+    return this.http.post<Record<string, unknown>>(`${this.baseUrl}/scheduler/jobs/${id}/cancel`, {});
+  }
+
+  deleteSchedulerJob(id: string) {
+    return this.http.delete<Record<string, unknown>>(`${this.baseUrl}/scheduler/jobs/${id}`);
+  }
+
+  schedulerPreviewCount(jobType: SchedulerJob['jobType'], workflowType: SchedulerJob['workflowType'], rule: SchedulerJob['rule']) {
+    const params = new HttpParams()
+      .set('jobType', jobType)
+      .set('workflowType', workflowType ?? 'COMPLETED_TO_ARCHIVE')
+      .set('rule', rule ?? 'CURRENT');
+    return this.http.get<{ eligibleWorkflowCount: number }>(`${this.baseUrl}/scheduler/preview-count`, { params });
+  }
+
+  schedulerWorkflowStatus() {
+    return this.http.get<Record<string, unknown>>(`${this.baseUrl}/scheduler/workflow-status`);
   }
 
   private readUser() {

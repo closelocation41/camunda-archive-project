@@ -1,0 +1,114 @@
+Below is a rewritten implementation prompt that includes both the NestJS API work and the Camunda BPMN workflow integration, with fault tolerance, retries, and archive/restore handling.
+
+Prompt:
+
+Create a Camunda-based archive and restore workflow solution in the existing NestJS project.
+
+Scope:
+1. Implement all required backend APIs in NestJS.
+2. Integrate Camunda BPMN workflows for:
+   - completed workflow/task archival
+   - archived workflow/task restoration back to the original Camunda database
+3. The archive workflow should move completed Camunda history data from the original Camunda database to the archive database.
+4. The restore workflow should move archived history data from the archive database back to the original Camunda database.
+
+Workflow names:
+- completed_task_move_to_archive.bpmn
+- archived_task_move_to_complete.bpmn
+
+Requirements:
+1. Backend APIs in NestJS
+   Create APIs to:
+   - create an archive job
+   - list archive jobs
+   - get job details and progress
+   - retry failed workflows
+   - get workflow archive status
+   - trigger archive workflow manually
+   - trigger restore workflow manually
+   - preview eligible workflows for archive based on date range and completion status
+
+2. Database design
+   Create archive database tables for:
+   - archive_job
+   - archive_job_item
+   - archive_job_retry_history
+   These tables should store:
+   - job name
+   - scheduled start date/time
+   - selected workflow count
+   - processing mode
+   - status
+   - created by
+   - progress counts
+   - started/finished timestamps
+   - error details
+   - retry count
+
+3. Archive workflow behaviour
+   - The archive workflow should process completed workflows sequentially, one by one.
+   - Admin should be able to create a job and select how many workflows should be processed.
+   - The workflow should pick completed workflows based on a date range and readiness rules.
+   - For each workflow:
+     - verify it is completed
+     - verify all required tasks are completed
+     - copy all related history data from the original Camunda database to the archive database
+     - validate that the required data has been moved
+     - mark the workflow as archived only after full success
+   - If one workflow fails, that workflow should be marked failed, but the job should continue processing the remaining workflows.
+   - Failed workflows should be retried automatically or manually.
+   - The workflow should report progress as:
+     - completed count
+     - failed count
+     - in progress count
+     - pending count
+     - percentage completed
+
+4. Restore workflow behaviour
+   - The restore workflow should process archived workflows and move the archived history data back to the original Camunda database.
+   - It should use the same fault-tolerant pattern:
+     - one workflow at a time
+     - retry on failure
+     - continue processing remaining workflows
+   - If one workflow fails, mark it failed and continue.
+
+5. Fault tolerance and retry management
+   - Implement retry logic for failed workflow items.
+   - Store retry attempts and last error message.
+   - If a workflow fails due to temporary issues, it should be retried later.
+   - If a workflow fails due to persistent issues, it should be marked permanently failed.
+   - Ensure the system is resilient to partial failures and does not stop the entire job because of one failed workflow.
+
+6. Camunda integration
+   - Use Camunda BPMN workflows to orchestrate the archive and restore operations.
+   - The NestJS backend should expose services that the BPMN service tasks can call.
+   - The workflow should call backend services for:
+     - selecting eligible workflows
+     - copying workflow history to archive
+     - validating data movement
+     - updating job item status
+     - handling retries and failure states
+   - The BPMN workflow should be triggered automatically by the scheduler when an archive job is due.
+   - The workflow should also be triggerable manually from the API.
+
+7. Existing project alignment
+   - Reuse the current archive project structure.
+   - Fit into the existing NestJS modules for archive, scheduler, restore, and Camunda integration.
+   - Preserve the current archive logic and extend it to support workflow-based orchestration.
+   - Do not break the current implementation; add workflow orchestration on top of it.
+
+Expected output:
+- NestJS APIs for archive job creation and management
+- Camunda BPMN workflows for archive and restore
+- Sequential processing of workflows with fault tolerance
+- Progress tracking and job monitoring
+- Retry support for failed workflows
+- Proper handling of archive and restore operations through workflow orchestration
+
+Important note:
+The archive workflow should be the main orchestration layer for moving completed tasks/workflows from the original Camunda database to the archive database, and the restore workflow should handle moving archived data back to the original Camunda database. The current implementation should be adapted so that the workflow engine manages the process, while the backend services perform the actual data movement and status updates.
+
+If you want, I can also rewrite this into:
+- a more developer-friendly implementation checklist,
+- a Jira-style task,
+- or a detailed technical design document.

@@ -1,0 +1,122 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" xmlns:camunda="http://camunda.org/schema/1.0/bpmn" id="Definitions_archived_task_move_to_complete" targetNamespace="http://camunda.org/archive">
+  <bpmn:process id="archived_task_move_to_complete" name="Archived Task Move To Complete" isExecutable="true">
+    <bpmn:extensionElements>
+      <camunda:properties>
+        <camunda:property name="version" value="camunda-7" />
+        <camunda:property name="orchestration" value="restore-archived-history" />
+      </camunda:properties>
+    </bpmn:extensionElements>
+    <bpmn:startEvent id="StartEvent_RestoreRequested" name="Restore requested">
+      <bpmn:outgoing>Flow_Start_SelectArchived</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:serviceTask id="ServiceTask_SelectArchived" name="Select archived workflows" camunda:type="external" camunda:topic="restore.selectArchived">
+      <bpmn:incoming>Flow_Start_SelectArchived</bpmn:incoming>
+      <bpmn:outgoing>Flow_SelectArchived_HasItems</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:exclusiveGateway id="Gateway_HasArchivedItems" name="Archived items found?">
+      <bpmn:incoming>Flow_SelectArchived_HasItems</bpmn:incoming>
+      <bpmn:outgoing>Flow_HasArchived_Prepare</bpmn:outgoing>
+      <bpmn:outgoing>Flow_NoArchived_Finalize</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:serviceTask id="ServiceTask_PrepareRestoreItem" name="Prepare next restore item" camunda:type="external" camunda:topic="restore.prepareNextItem">
+      <bpmn:incoming>Flow_HasArchived_Prepare</bpmn:incoming>
+      <bpmn:incoming>Flow_MoreRestore_Prepare</bpmn:incoming>
+      <bpmn:outgoing>Flow_PrepareRestore_Verify</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:serviceTask id="ServiceTask_VerifyArchived" name="Verify archived history bundle" camunda:type="external" camunda:topic="restore.verifyArchived">
+      <bpmn:incoming>Flow_PrepareRestore_Verify</bpmn:incoming>
+      <bpmn:outgoing>Flow_VerifyArchived_CopyBack</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:boundaryEvent id="Boundary_VerifyArchivedFailure" attachedToRef="ServiceTask_VerifyArchived">
+      <bpmn:outgoing>Flow_VerifyArchivedFailure_MarkFailed</bpmn:outgoing>
+      <bpmn:errorEventDefinition />
+    </bpmn:boundaryEvent>
+    <bpmn:serviceTask id="ServiceTask_CopyBack" name="Copy archive history to Camunda DB" camunda:type="external" camunda:topic="restore.copyBack">
+      <bpmn:incoming>Flow_VerifyArchived_CopyBack</bpmn:incoming>
+      <bpmn:outgoing>Flow_CopyBack_Validate</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:boundaryEvent id="Boundary_CopyBackFailure" attachedToRef="ServiceTask_CopyBack">
+      <bpmn:outgoing>Flow_CopyBackFailure_MarkFailed</bpmn:outgoing>
+      <bpmn:errorEventDefinition />
+    </bpmn:boundaryEvent>
+    <bpmn:serviceTask id="ServiceTask_ValidateRestore" name="Validate restore in Camunda DB" camunda:type="external" camunda:topic="restore.validateMove">
+      <bpmn:incoming>Flow_CopyBack_Validate</bpmn:incoming>
+      <bpmn:outgoing>Flow_ValidateRestore_MarkRestored</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:boundaryEvent id="Boundary_ValidateRestoreFailure" attachedToRef="ServiceTask_ValidateRestore">
+      <bpmn:outgoing>Flow_ValidateRestoreFailure_MarkFailed</bpmn:outgoing>
+      <bpmn:errorEventDefinition />
+    </bpmn:boundaryEvent>
+    <bpmn:serviceTask id="ServiceTask_MarkRestored" name="Mark workflow restored" camunda:type="external" camunda:topic="restore.markRestored">
+      <bpmn:incoming>Flow_ValidateRestore_MarkRestored</bpmn:incoming>
+      <bpmn:outgoing>Flow_MarkRestored_UpdateProgress</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:serviceTask id="ServiceTask_MarkRestoreFailed" name="Mark restore item failed" camunda:type="external" camunda:topic="restore.markItemFailed">
+      <bpmn:incoming>Flow_VerifyArchivedFailure_MarkFailed</bpmn:incoming>
+      <bpmn:incoming>Flow_CopyBackFailure_MarkFailed</bpmn:incoming>
+      <bpmn:incoming>Flow_ValidateRestoreFailure_MarkFailed</bpmn:incoming>
+      <bpmn:outgoing>Flow_MarkRestoreFailed_UpdateProgress</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:serviceTask id="ServiceTask_UpdateRestoreProgress" name="Update restore progress counts" camunda:type="external" camunda:topic="restore.updateProgress">
+      <bpmn:incoming>Flow_MarkRestored_UpdateProgress</bpmn:incoming>
+      <bpmn:incoming>Flow_MarkRestoreFailed_UpdateProgress</bpmn:incoming>
+      <bpmn:outgoing>Flow_UpdateRestore_More</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:exclusiveGateway id="Gateway_MoreRestoreItems" name="More restore items?">
+      <bpmn:incoming>Flow_UpdateRestore_More</bpmn:incoming>
+      <bpmn:outgoing>Flow_MoreRestore_Prepare</bpmn:outgoing>
+      <bpmn:outgoing>Flow_NoMoreRestore_Finalize</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:serviceTask id="ServiceTask_FinalizeRestoreJob" name="Finalize restore job" camunda:type="external" camunda:topic="restore.finalizeJob">
+      <bpmn:incoming>Flow_NoArchived_Finalize</bpmn:incoming>
+      <bpmn:incoming>Flow_NoMoreRestore_Finalize</bpmn:incoming>
+      <bpmn:outgoing>Flow_FinalizeRestore_End</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:endEvent id="EndEvent_RestoreComplete" name="Restore job complete">
+      <bpmn:incoming>Flow_FinalizeRestore_End</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:sequenceFlow id="Flow_Start_SelectArchived" sourceRef="StartEvent_RestoreRequested" targetRef="ServiceTask_SelectArchived" />
+    <bpmn:sequenceFlow id="Flow_SelectArchived_HasItems" sourceRef="ServiceTask_SelectArchived" targetRef="Gateway_HasArchivedItems" />
+    <bpmn:sequenceFlow id="Flow_HasArchived_Prepare" sourceRef="Gateway_HasArchivedItems" targetRef="ServiceTask_PrepareRestoreItem">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">${selectedWorkflowCount &gt; 0}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_NoArchived_Finalize" sourceRef="Gateway_HasArchivedItems" targetRef="ServiceTask_FinalizeRestoreJob">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">${selectedWorkflowCount == 0}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_PrepareRestore_Verify" sourceRef="ServiceTask_PrepareRestoreItem" targetRef="ServiceTask_VerifyArchived" />
+    <bpmn:sequenceFlow id="Flow_VerifyArchived_CopyBack" sourceRef="ServiceTask_VerifyArchived" targetRef="ServiceTask_CopyBack" />
+    <bpmn:sequenceFlow id="Flow_CopyBack_Validate" sourceRef="ServiceTask_CopyBack" targetRef="ServiceTask_ValidateRestore" />
+    <bpmn:sequenceFlow id="Flow_ValidateRestore_MarkRestored" sourceRef="ServiceTask_ValidateRestore" targetRef="ServiceTask_MarkRestored" />
+    <bpmn:sequenceFlow id="Flow_VerifyArchivedFailure_MarkFailed" sourceRef="Boundary_VerifyArchivedFailure" targetRef="ServiceTask_MarkRestoreFailed" />
+    <bpmn:sequenceFlow id="Flow_CopyBackFailure_MarkFailed" sourceRef="Boundary_CopyBackFailure" targetRef="ServiceTask_MarkRestoreFailed" />
+    <bpmn:sequenceFlow id="Flow_ValidateRestoreFailure_MarkFailed" sourceRef="Boundary_ValidateRestoreFailure" targetRef="ServiceTask_MarkRestoreFailed" />
+    <bpmn:sequenceFlow id="Flow_MarkRestored_UpdateProgress" sourceRef="ServiceTask_MarkRestored" targetRef="ServiceTask_UpdateRestoreProgress" />
+    <bpmn:sequenceFlow id="Flow_MarkRestoreFailed_UpdateProgress" sourceRef="ServiceTask_MarkRestoreFailed" targetRef="ServiceTask_UpdateRestoreProgress" />
+    <bpmn:sequenceFlow id="Flow_UpdateRestore_More" sourceRef="ServiceTask_UpdateRestoreProgress" targetRef="Gateway_MoreRestoreItems" />
+    <bpmn:sequenceFlow id="Flow_MoreRestore_Prepare" sourceRef="Gateway_MoreRestoreItems" targetRef="ServiceTask_PrepareRestoreItem">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">${pendingCount &gt; 0}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_NoMoreRestore_Finalize" sourceRef="Gateway_MoreRestoreItems" targetRef="ServiceTask_FinalizeRestoreJob">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">${pendingCount == 0}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_FinalizeRestore_End" sourceRef="ServiceTask_FinalizeRestoreJob" targetRef="EndEvent_RestoreComplete" />
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_archived_task_move_to_complete">
+    <bpmndi:BPMNPlane id="BPMNPlane_archived_task_move_to_complete" bpmnElement="archived_task_move_to_complete">
+      <bpmndi:BPMNShape id="StartEvent_RestoreRequested_di" bpmnElement="StartEvent_RestoreRequested"><dc:Bounds x="150" y="180" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="ServiceTask_SelectArchived_di" bpmnElement="ServiceTask_SelectArchived"><dc:Bounds x="230" y="158" width="150" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gateway_HasArchivedItems_di" bpmnElement="Gateway_HasArchivedItems" isMarkerVisible="true"><dc:Bounds x="430" y="173" width="50" height="50" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="ServiceTask_PrepareRestoreItem_di" bpmnElement="ServiceTask_PrepareRestoreItem"><dc:Bounds x="530" y="158" width="150" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="ServiceTask_VerifyArchived_di" bpmnElement="ServiceTask_VerifyArchived"><dc:Bounds x="730" y="158" width="150" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="ServiceTask_CopyBack_di" bpmnElement="ServiceTask_CopyBack"><dc:Bounds x="930" y="158" width="150" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="ServiceTask_ValidateRestore_di" bpmnElement="ServiceTask_ValidateRestore"><dc:Bounds x="1130" y="158" width="150" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="ServiceTask_MarkRestored_di" bpmnElement="ServiceTask_MarkRestored"><dc:Bounds x="1330" y="158" width="150" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="ServiceTask_MarkRestoreFailed_di" bpmnElement="ServiceTask_MarkRestoreFailed"><dc:Bounds x="930" y="310" width="150" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="ServiceTask_UpdateRestoreProgress_di" bpmnElement="ServiceTask_UpdateRestoreProgress"><dc:Bounds x="1530" y="158" width="150" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gateway_MoreRestoreItems_di" bpmnElement="Gateway_MoreRestoreItems" isMarkerVisible="true"><dc:Bounds x="1730" y="173" width="50" height="50" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="ServiceTask_FinalizeRestoreJob_di" bpmnElement="ServiceTask_FinalizeRestoreJob"><dc:Bounds x="1840" y="158" width="150" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="EndEvent_RestoreComplete_di" bpmnElement="EndEvent_RestoreComplete"><dc:Bounds x="2040" y="180" width="36" height="36" /></bpmndi:BPMNShape>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

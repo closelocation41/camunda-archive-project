@@ -24,7 +24,7 @@ import { ApiService } from './core/api.service';
           <a routerLink="/archive" routerLinkActive="active">Archived Workflows</a>
           <a routerLink="/incidents" routerLinkActive="active">Incident Monitoring</a>
           <a routerLink="/restore" routerLinkActive="active">Restore Workflow</a>
-          <a routerLink="/operations" routerLinkActive="active">Cleanup Monitoring</a>
+          <a routerLink="/operations" routerLinkActive="active">Job Scheduler</a>
           <details class="nav-dropdown">
             <summary>Documents</summary>
             <a href="/assets/docs/README.md" target="_blank" rel="noreferrer">README</a>

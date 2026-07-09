@@ -14,6 +14,52 @@ CREATE TABLE IF NOT EXISTS arc_archive_run (
   created_by varchar(128) NOT NULL DEFAULT 'scheduler'
 );
 
+CREATE TABLE IF NOT EXISTS archive_job (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  job_type varchar(64) NOT NULL,
+  job_name varchar(255) NOT NULL,
+  scheduled_start_time timestamptz NOT NULL,
+  date_range_start timestamptz,
+  date_range_end timestamptz,
+  selected_workflow_count integer NOT NULL DEFAULT 0,
+  processing_mode varchar(32) NOT NULL DEFAULT 'SEQUENTIAL',
+  status varchar(32) NOT NULL DEFAULT 'SCHEDULED',
+  created_by varchar(128) NOT NULL DEFAULT 'operator',
+  completed_count integer NOT NULL DEFAULT 0,
+  failed_count integer NOT NULL DEFAULT 0,
+  in_progress_count integer NOT NULL DEFAULT 0,
+  pending_count integer NOT NULL DEFAULT 0,
+  retry_count integer NOT NULL DEFAULT 0,
+  last_error_message text,
+  started_at timestamptz,
+  finished_at timestamptz,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS archive_job_item (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  archive_job_id uuid NOT NULL REFERENCES archive_job(id) ON DELETE CASCADE,
+  process_instance_id varchar(64) NOT NULL,
+  status varchar(32) NOT NULL DEFAULT 'PENDING',
+  retry_count integer NOT NULL DEFAULT 0,
+  last_error_message text,
+  started_at timestamptz,
+  finished_at timestamptz,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS archive_job_retry_history (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  archive_job_id uuid NOT NULL REFERENCES archive_job(id) ON DELETE CASCADE,
+  archive_job_item_id uuid REFERENCES archive_job_item(id) ON DELETE SET NULL,
+  attempt_number integer NOT NULL,
+  status varchar(32) NOT NULL,
+  error_message text,
+  attempted_at timestamptz NOT NULL DEFAULT now()
+);
+
 CREATE TABLE IF NOT EXISTS arc_restore_log (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   original_proc_inst_id varchar(64) NOT NULL,
