@@ -19,23 +19,41 @@
   }
 </div>
 <section class="panel table-wrap">
+  @if (loading()) {
+    <div class="empty-state">Loading archived workflows...</div>
+  } @else if (flattenedRows().length === 0) {
+    <div class="empty-state">No archived workflows found.</div>
+  } @else {
   <table class="table">
     <tr><th></th><th>Instance</th><th>Definition</th><th>Business Key</th><th>Started</th><th>Ended</th><th>Hierarchy</th><th>Action</th></tr>
-    @for (row of rows(); track row['proc_inst_id_']) {
+    @for (row of flattenedRows(); track row['proc_inst_id_']) {
       <tr>
         <td>
-          <input type="checkbox" [checked]="isSelected(id(row))" (change)="toggle(id(row), $any($event.target).checked)" />
+          @if (isRootRow(row)) {
+            <input type="checkbox" [checked]="isSelected(id(row))" (change)="toggle(id(row), $any($event.target).checked)" />
+          }
         </td>
-        <td><a [routerLink]="['/workflow', row['proc_inst_id_']]">{{ row['proc_inst_id_'] }}</a></td>
+        <td>
+          <span [style.margin-left.px]="rowDepth(row) * 18"></span>
+          @if (rowDepth(row) > 0) {
+            <span class="badge">Child</span>
+          }
+          <a [routerLink]="['/workflow', row['proc_inst_id_']]">{{ row['proc_inst_id_'] }}</a>
+        </td>
         <td>{{ row['proc_def_key_'] }}</td>
         <td>{{ row['business_key_'] || '-' }}</td>
         <td>{{ row['start_time_'] }}</td>
         <td>{{ row['end_time_'] || '-' }}</td>
         <td>{{ row['super_process_instance_id_'] || row['root_proc_inst_id_'] || '-' }}</td>
-        <td><button class="btn" (click)="resync(row)">Re-sync</button></td>
+        <td>
+          @if (isRootRow(row)) {
+            <button class="btn" (click)="resync(row)">Re-sync</button>
+          }
+        </td>
       </tr>
     }
   </table>
+  }
 </section>
 <div class="pagination">
   <button class="btn" [disabled]="page() === 1" (click)="previousPage()">Previous</button>

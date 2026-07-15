@@ -47,7 +47,7 @@ export class RestoreRepository {
   async findChildren(processInstanceId: string) {
     const { rows } = await this.db.query<{ proc_inst_id_: string }>(
       `select proc_inst_id_
-       from arc_act_hi_procinst
+       from act_hi_procinst
        where super_process_instance_id_ = $1
        order by start_time_`,
       [processInstanceId],

@@ -5,6 +5,17 @@ select {
   padding: 10px 12px;
 }
 
+.badge {
+  display: inline-block;
+  margin-right: 8px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: #e6f2ff;
+  color: #0b5fff;
+  font-size: 12px;
+  font-weight: 600;
+}
+
 input {
   min-width: min(440px, 100%);
 }
@@ -26,4 +37,10 @@ input {
   align-items: center;
   justify-content: flex-end;
   margin-top: 14px;
+}
+
+.empty-state {
+  padding: 20px;
+  color: #5b6472;
+  font-style: italic;
 }

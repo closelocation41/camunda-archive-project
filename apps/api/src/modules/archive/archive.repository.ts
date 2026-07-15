@@ -4,24 +4,32 @@ import { ARCHIVE_DB, CAMUNDA_DB } from '../database/database.module';
 import { ArchiveQueryDto } from './dto/archive-query.dto';
 
 const HISTORY_TABLES = [
-  ['act_hi_procinst', 'arc_act_hi_procinst'],
-  ['act_hi_actinst', 'arc_act_hi_actinst'],
-  ['act_hi_taskinst', 'arc_act_hi_taskinst'],
-  ['act_hi_varinst', 'arc_act_hi_varinst'],
-  ['act_hi_detail', 'arc_act_hi_detail'],
-  ['act_hi_incident', 'arc_act_hi_incident'],
-  ['act_hi_job_log', 'arc_act_hi_job_log'],
-  ['act_ge_bytearray', 'arc_act_ge_bytearray'],
-  ['act_hi_op_log', 'arc_act_hi_op_log'],
-  ['act_hi_attachment', 'arc_act_hi_attachment'],
-  ['act_hi_comment', 'arc_act_hi_comment'],
+  ['act_hi_procinst', 'act_hi_procinst'],
+  ['act_hi_actinst', 'act_hi_actinst'],
+  ['act_hi_taskinst', 'act_hi_taskinst'],
+  ['act_hi_varinst', 'act_hi_varinst'],
+  ['act_hi_detail', 'act_hi_detail'],
+  ['act_hi_incident', 'act_hi_incident'],
+  ['act_hi_job_log', 'act_hi_job_log'],
+  ['act_hi_op_log', 'act_hi_op_log'],
+  ['act_hi_attachment', 'act_hi_attachment'],
+  ['act_hi_comment', 'act_hi_comment'],
+  ['act_hi_identitylink', 'act_hi_identitylink'],
+  ['act_hi_caseinst', 'act_hi_caseinst'],
+  ['act_hi_caseactinst', 'act_hi_caseactinst'],
+  ['act_hi_decinst', 'act_hi_decinst'],
+  ['act_hi_dec_in', 'act_hi_dec_in'],
+  ['act_hi_dec_out', 'act_hi_dec_out'],
+  ['act_hi_ext_task_log', 'act_hi_ext_task_log'],
+  ['act_hi_batch', 'act_hi_batch'],
+  ['act_ge_bytearray', 'act_ge_bytearray'],
 ] as const;
 
 const ARCHIVE_METADATA_COLUMNS = new Set(['archived_at', 'archive_run_id', 'soft_deleted_at']);
 
 @Injectable()
 export class ArchiveRepository {
-  private readonly columnCache = new Map<string, Set<string>>();
+  private readonly columnCache = new WeakMap<object, Map<string, Set<string>>>();
 
   constructor(
     @Inject(ARCHIVE_DB) private readonly archiveDb: Pool,
@@ -29,6 +37,7 @@ export class ArchiveRepository {
   ) {}
 
   async createRun(runType: string) {
+    await this.ensureArchiveRunTable();
     const { rows } = await this.archiveDb.query<{ id: string }>(
       'insert into arc_archive_run (run_type, status) values ($1, $2) returning id',
       [runType, 'RUNNING'],
@@ -37,6 +46,7 @@ export class ArchiveRepository {
   }
 
   async finishRun(id: string, status: string, counters: Record<string, number>, error?: string) {
+    await this.ensureArchiveRunTable();
     await this.archiveDb.query(
       `update arc_archive_run
        set status = $2, finished_at = now(), selected_count = $3, archived_count = $4,
@@ -44,6 +54,37 @@ export class ArchiveRepository {
        where id = $1`,
       [id, status, counters.selected ?? 0, counters.archived ?? 0, counters.skipped ?? 0, counters.failed ?? 0, error],
     );
+  }
+
+  private async ensureArchiveRunTable() {
+    await this.archiveDb.query(`
+      create table if not exists arc_archive_run (
+        id uuid primary key default gen_random_uuid(),
+        run_type varchar(128) not null,
+        status varchar(32) not null default 'RUNNING',
+        selected_count integer not null default 0,
+        archived_count integer not null default 0,
+        skipped_count integer not null default 0,
+        failed_count integer not null default 0,
+        error_message text,
+        started_at timestamptz not null default now(),
+        finished_at timestamptz,
+        created_at timestamptz not null default now(),
+        updated_at timestamptz not null default now()
+      );
+
+      alter table arc_archive_run add column if not exists run_type varchar(128);
+      alter table arc_archive_run add column if not exists status varchar(32) not null default 'RUNNING';
+      alter table arc_archive_run add column if not exists selected_count integer not null default 0;
+      alter table arc_archive_run add column if not exists archived_count integer not null default 0;
+      alter table arc_archive_run add column if not exists skipped_count integer not null default 0;
+      alter table arc_archive_run add column if not exists failed_count integer not null default 0;
+      alter table arc_archive_run add column if not exists error_message text;
+      alter table arc_archive_run add column if not exists started_at timestamptz not null default now();
+      alter table arc_archive_run add column if not exists finished_at timestamptz;
+      alter table arc_archive_run add column if not exists created_at timestamptz not null default now();
+      alter table arc_archive_run add column if not exists updated_at timestamptz not null default now();
+    `);
   }
 
   async findEligibleProcessIds(state: 'COMPLETED' | 'FAILED' | 'SUSPENDED', olderThanDays: number, limit: number) {
@@ -63,7 +104,8 @@ export class ArchiveRepository {
        limit $2`,
       [olderThanDays, limit],
     );
-    return rows.map((row) => row.proc_inst_id_);
+    const candidateIds = rows.map((row) => row.proc_inst_id_);
+    return this.filterIndependentProcessIds(candidateIds);
   }
 
   async expandWithChildren(processIds: string[]) {
@@ -99,15 +141,16 @@ export class ArchiveRepository {
           : "state_ = 'SUSPENDED' and end_time_ is null";
     const timeFilter = this.ruleTimeFilter(rule, 'coalesce(end_time_, start_time_)');
     const exclusion = this.exclusionFilter(excludedProcessIds, 'proc_inst_id_', 1);
-    const { rows } = await this.camundaDb.query<{ count: string }>(
-      `select count(*)::text as count
+    const { rows } = await this.camundaDb.query<{ proc_inst_id_: string }>(
+      `select proc_inst_id_
        from act_hi_procinst
        where ${stateFilter}
          ${timeFilter}
          ${exclusion.clause}`,
       exclusion.args,
     );
-    return Number(rows[0]?.count ?? 0);
+    const candidateIds = rows.map((row) => row.proc_inst_id_);
+    return (await this.filterIndependentProcessIds(candidateIds)).length;
   }
 
   async findSchedulerProcessIds(
@@ -135,7 +178,8 @@ export class ArchiveRepository {
        limit $${limitIndex}`,
       [...exclusion.args, limit],
     );
-    return rows.map((row) => row.proc_inst_id_);
+    const candidateIds = rows.map((row) => row.proc_inst_id_);
+    return this.filterIndependentProcessIds(candidateIds);
   }
 
   async countArchivedProcessIds(
@@ -144,15 +188,16 @@ export class ArchiveRepository {
   ) {
     const timeFilter = this.ruleTimeFilter(rule, 'archived_at');
     const exclusion = this.exclusionFilter(excludedProcessIds, 'proc_inst_id_', 1);
-    const { rows } = await this.archiveDb.query<{ count: string }>(
-      `select count(*)::text as count
-       from arc_act_hi_procinst
+    const { rows } = await this.archiveDb.query<{ proc_inst_id_: string }>(
+      `select proc_inst_id_
+       from act_hi_procinst
        where soft_deleted_at is null
          ${timeFilter}
          ${exclusion.clause}`,
       exclusion.args,
     );
-    return Number(rows[0]?.count ?? 0);
+    const candidateIds = rows.map((row) => row.proc_inst_id_);
+    return (await this.filterIndependentArchivedProcessIds(candidateIds)).length;
   }
 
   async findArchivedProcessIds(
@@ -165,7 +210,7 @@ export class ArchiveRepository {
     const limitIndex = excludedProcessIds.length ? 2 : 1;
     const { rows } = await this.archiveDb.query<{ proc_inst_id_: string }>(
       `select proc_inst_id_
-       from arc_act_hi_procinst
+       from act_hi_procinst
        where soft_deleted_at is null
          ${timeFilter}
          ${exclusion.clause}
@@ -173,7 +218,8 @@ export class ArchiveRepository {
        limit $${limitIndex}`,
       [...exclusion.args, limit],
     );
-    return rows.map((row) => row.proc_inst_id_);
+    const candidateIds = rows.map((row) => row.proc_inst_id_);
+    return this.filterIndependentArchivedProcessIds(candidateIds);
   }
 
   async filterIndependentProcessIds(processIds: string[]) {
@@ -215,14 +261,14 @@ export class ArchiveRepository {
     const { rows } = await this.archiveDb.query<{ proc_inst_id_: string }>(
       `with recursive ancestors as (
          select child.proc_inst_id_, parent.proc_inst_id_ as ancestor_id_
-         from arc_act_hi_procinst child
-         join arc_act_hi_procinst parent on child.super_process_instance_id_ = parent.proc_inst_id_
+         from act_hi_procinst child
+         join act_hi_procinst parent on child.super_process_instance_id_ = parent.proc_inst_id_
          where child.proc_inst_id_ = any($1)
          union all
          select ancestors.proc_inst_id_, parent.proc_inst_id_ as ancestor_id_
          from ancestors
-         join arc_act_hi_procinst child on child.proc_inst_id_ = ancestors.ancestor_id_
-         join arc_act_hi_procinst parent on child.super_process_instance_id_ = parent.proc_inst_id_
+         join act_hi_procinst child on child.proc_inst_id_ = ancestors.ancestor_id_
+         join act_hi_procinst parent on child.super_process_instance_id_ = parent.proc_inst_id_
        )
        select candidate.proc_inst_id_
        from unnest($1::varchar[]) with ordinality as candidate(proc_inst_id_, sort_order)
@@ -245,7 +291,7 @@ export class ArchiveRepository {
 
     const { rows } = await this.archiveDb.query<{ proc_inst_id_: string }>(
       `select distinct proc_inst_id_
-       from arc_act_hi_procinst
+       from act_hi_procinst
        where proc_inst_id_ = any($1) and soft_deleted_at is null`,
       [processIds],
     );
@@ -271,7 +317,7 @@ export class ArchiveRepository {
     const processCheck = await this.archiveDb.query<{ total_count: string; missing_count: string }>(
       `select count(*)::text as total_count,
               count(*) filter (where proc_inst_id_ is null)::text as missing_count
-       from arc_act_hi_procinst
+       from act_hi_procinst
        where proc_inst_id_ = any($1)`,
       [processIds],
     );
@@ -343,11 +389,20 @@ export class ArchiveRepository {
     try {
       await archiveClient.query('begin');
       await camundaClient.query('begin');
-      for (const [source, target] of HISTORY_TABLES) {
-        const { rows } = await camundaClient.query(`select * from ${source} where ${this.processFilter(source, false)}`, [processIds]);
+      const historyTablePairs = await this.resolveHistoryTablePairs(camundaClient, archiveClient);
+      for (const [source, target] of historyTablePairs) {
+        await this.ensureTargetColumns(camundaClient, archiveClient, source, target);
+        const whereClause = await this.processFilter(camundaClient, source, false);
+        if (!whereClause) {
+          continue;
+        }
+        const { rows } = await camundaClient.query(`select * from ${source} where ${whereClause}`, [processIds]);
         const targetColumns = await this.tableColumns(archiveClient, target);
         for (const row of rows) {
           const columns = this.insertableColumns(row, targetColumns);
+          if (!columns.length) {
+            continue;
+          }
           const values = columns.map((column) => row[column]);
           const placeholders = columns.map((_, index) => `$${index + 1}`);
           await archiveClient.query(
@@ -385,11 +440,20 @@ export class ArchiveRepository {
     try {
       await archiveClient.query('begin');
       await camundaClient.query('begin');
-      for (const [target, source] of HISTORY_TABLES) {
-        const { rows } = await archiveClient.query(`select * from ${source} where ${this.processFilter(source, true)}`, [processIds]);
+      const historyTablePairs = await this.resolveHistoryTablePairs(archiveClient, camundaClient);
+      for (const [target, source] of historyTablePairs) {
+        await this.ensureTargetColumns(archiveClient, camundaClient, source, target);
+        const whereClause = await this.processFilter(archiveClient, source, true);
+        if (!whereClause) {
+          continue;
+        }
+        const { rows } = await archiveClient.query(`select * from ${source} where ${whereClause}`, [processIds]);
         const targetColumns = await this.tableColumns(camundaClient, target);
         for (const row of rows) {
           const columns = this.insertableColumns(row, targetColumns);
+          if (!columns.length) {
+            continue;
+          }
           const values = columns.map((column) => row[column]);
           const placeholders = columns.map((_, index) => `$${index + 1}`);
           await camundaClient.query(
@@ -433,28 +497,25 @@ export class ArchiveRepository {
     const { rows } = await this.archiveDb.query(
       `select proc_inst_id_, business_key_, proc_def_key_, proc_def_id_, start_time_, end_time_,
               duration_, state_, super_process_instance_id_, root_proc_inst_id_, archived_at
-       from arc_act_hi_procinst
+       from act_hi_procinst
        where ${where}
        order by archived_at desc
        limit $${values.length - 1} offset $${values.length}`,
       values,
     );
-    const count = await this.archiveDb.query<{ count: string }>(
-      `select count(*)::text from arc_act_hi_procinst where ${where}`,
-      values.slice(0, -2),
-    );
-    return { data: rows, total: Number(count.rows[0].count), page: query.page, limit: query.limit };
+    const pagedRows = rows.slice(offset, offset + query.limit);
+    return { data: pagedRows, total: rows.length, page: query.page, limit: query.limit };
   }
 
   async getArchiveBundle(processInstanceId: string) {
     const [process, activities, tasks, variables, incidents, jobs, comments] = await Promise.all([
-      this.archiveDb.query('select * from arc_act_hi_procinst where proc_inst_id_ = $1', [processInstanceId]),
-      this.archiveDb.query('select * from arc_act_hi_actinst where proc_inst_id_ = $1 order by start_time_', [processInstanceId]),
-      this.archiveDb.query('select * from arc_act_hi_taskinst where proc_inst_id_ = $1 order by start_time_', [processInstanceId]),
-      this.archiveDb.query('select * from arc_act_hi_varinst where proc_inst_id_ = $1 order by create_time_', [processInstanceId]),
-      this.archiveDb.query('select * from arc_act_hi_incident where proc_inst_id_ = $1 order by create_time_', [processInstanceId]),
-      this.archiveDb.query('select * from arc_act_hi_job_log where process_instance_id_ = $1 order by timestamp_', [processInstanceId]),
-      this.archiveDb.query('select * from arc_act_hi_comment where proc_inst_id_ = $1 order by time_', [processInstanceId]),
+      this.archiveDb.query('select * from act_hi_procinst where proc_inst_id_ = $1', [processInstanceId]),
+      this.archiveDb.query('select * from act_hi_actinst where proc_inst_id_ = $1 order by start_time_', [processInstanceId]),
+      this.archiveDb.query('select * from act_hi_taskinst where proc_inst_id_ = $1 order by start_time_', [processInstanceId]),
+      this.archiveDb.query('select * from act_hi_varinst where proc_inst_id_ = $1 order by create_time_', [processInstanceId]),
+      this.archiveDb.query('select * from act_hi_incident where proc_inst_id_ = $1 order by create_time_', [processInstanceId]),
+      this.archiveDb.query('select * from act_hi_job_log where process_instance_id_ = $1 order by timestamp_', [processInstanceId]),
+      this.archiveDb.query('select * from act_hi_comment where proc_inst_id_ = $1 order by time_', [processInstanceId]),
     ]);
     return {
       process: process.rows[0],
@@ -467,19 +528,77 @@ export class ArchiveRepository {
     };
   }
 
-  private processFilter(table: string, archive: boolean) {
+  private async resolveHistoryTablePairs(sourceClient: Pool | PoolClient, targetClient: Pool | PoolClient) {
+    const pairs: Array<[string, string]> = [];
+    for (const [source, target] of HISTORY_TABLES) {
+      const sourceExists = await this.tableExists(sourceClient, source);
+      const targetExists = await this.tableExists(targetClient, target);
+      if (!sourceExists || !targetExists) {
+        continue;
+      }
+      pairs.push([source, target]);
+    }
+    return pairs;
+  }
+
+  private async ensureTargetColumns(
+    sourceClient: Pool | PoolClient,
+    targetClient: Pool | PoolClient,
+    sourceTable: string,
+    targetTable: string,
+  ) {
+    const sourceColumns = await this.columnDefinitions(sourceClient, sourceTable);
+    const targetColumns = await this.tableColumns(targetClient, targetTable);
+    const missingColumns = sourceColumns.filter((column) => !targetColumns.has(column.name) && !ARCHIVE_METADATA_COLUMNS.has(column.name));
+
+    if (!missingColumns.length) {
+      return;
+    }
+
+    for (const column of missingColumns) {
+      await targetClient.query(
+        `alter table ${targetTable} add column if not exists ${this.quoteIdentifier(column.name)} ${column.definition}`,
+      );
+    }
+
+    this.columnCache.delete(targetClient);
+  }
+
+  private async processFilter(client: Pool | PoolClient, table: string, archive: boolean) {
     if (table.endsWith('act_hi_job_log')) {
       return 'process_instance_id_ = any($1)';
     }
     if (table.endsWith('act_ge_bytearray')) {
-      const prefix = archive ? 'arc_' : '';
       return `id_ in (
-        select bytearray_id_ from ${prefix}act_hi_varinst where proc_inst_id_ = any($1) and bytearray_id_ is not null
-        union select bytearray_id_ from ${prefix}act_hi_detail where proc_inst_id_ = any($1) and bytearray_id_ is not null
-        union select job_exception_stack_id_ from ${prefix}act_hi_job_log where process_instance_id_ = any($1) and job_exception_stack_id_ is not null
+        select bytearray_id_ from act_hi_varinst where proc_inst_id_ = any($1) and bytearray_id_ is not null
+        union select bytearray_id_ from act_hi_detail where proc_inst_id_ = any($1) and bytearray_id_ is not null
+        union select job_exception_stack_id_ from act_hi_job_log where process_instance_id_ = any($1) and job_exception_stack_id_ is not null
       )`;
     }
-    return 'proc_inst_id_ = any($1)';
+
+    const columns = await this.tableColumns(client, table);
+    if (columns.has('proc_inst_id_')) {
+      return 'proc_inst_id_ = any($1)';
+    }
+    if (columns.has('process_instance_id_')) {
+      return 'process_instance_id_ = any($1)';
+    }
+    if (columns.has('root_proc_inst_id_')) {
+      return 'root_proc_inst_id_ = any($1)';
+    }
+    return null;
+  }
+
+  private async tableExists(client: Pool | PoolClient, tableName: string) {
+    const { rows } = await client.query<{ exists: boolean }>(
+      `select exists (
+         select 1
+         from information_schema.tables
+         where table_schema = 'public' and table_name = $1
+       ) as exists`,
+      [tableName],
+    );
+    return rows[0]?.exists ?? false;
   }
 
   private insertableColumns(row: Record<string, unknown>, targetColumns: Set<string>) {
@@ -488,8 +607,8 @@ export class ArchiveRepository {
 
   private async deleteHistory(client: PoolClient, processIds: string[], archive: boolean) {
     const tables = archive ? HISTORY_TABLES.map(([, target]) => target) : HISTORY_TABLES.map(([source]) => source);
-    const procInstTable = archive ? 'arc_act_hi_procinst' : 'act_hi_procinst';
-    const byteArrayTable = archive ? 'arc_act_ge_bytearray' : 'act_ge_bytearray';
+    const procInstTable = 'act_hi_procinst';
+    const byteArrayTable = 'act_ge_bytearray';
     const deleteOrder = [
       byteArrayTable,
       ...tables.filter((table) => table !== byteArrayTable && table !== procInstTable),
@@ -497,14 +616,21 @@ export class ArchiveRepository {
     ];
 
     for (const table of deleteOrder) {
-      await client.query(`delete from ${table} where ${this.processFilter(table, archive)}`, [processIds]);
+      const whereClause = await this.processFilter(client, table, archive);
+      if (!whereClause) {
+        continue;
+      }
+      await client.query(`delete from ${table} where ${whereClause}`, [processIds]);
     }
   }
 
-  private async tableColumns(client: PoolClient, tableName: string) {
-    const cached = this.columnCache.get(tableName);
-    if (cached) {
-      return cached;
+  private async tableColumns(client: Pool | PoolClient, tableName: string) {
+    const existingClientCache = this.columnCache.get(client);
+    if (existingClientCache) {
+      const cached = existingClientCache.get(tableName);
+      if (cached) {
+        return cached;
+      }
     }
 
     const { rows } = await client.query<{ column_name: string }>(
@@ -514,8 +640,31 @@ export class ArchiveRepository {
       [tableName],
     );
     const columns = new Set(rows.map((row) => row.column_name));
-    this.columnCache.set(tableName, columns);
+    if (!this.columnCache.has(client)) {
+      this.columnCache.set(client, new Map<string, Set<string>>());
+    }
+    this.columnCache.get(client)?.set(tableName, columns);
     return columns;
+  }
+
+  private async columnDefinitions(client: Pool | PoolClient, tableName: string) {
+    const { rows } = await client.query<{ column_name: string; definition: string }>(
+      `select c.column_name,
+              pg_catalog.format_type(a.atttypid, a.atttypmod) as definition
+       from information_schema.columns c
+       left join pg_catalog.pg_attribute a
+         on a.attrelid = to_regclass($1)::oid
+        and a.attname = c.column_name
+        and a.attnum > 0
+       where c.table_schema = 'public' and c.table_name = $1
+       order by c.ordinal_position`,
+      [tableName],
+    );
+    return rows.map((row) => ({ name: row.column_name, definition: row.definition }));
+  }
+
+  private quoteIdentifier(identifier: string) {
+    return `"${identifier.replace(/"/g, '""')}"`;
   }
 
   private ruleTimeFilter(

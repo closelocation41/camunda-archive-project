@@ -1,4 +1,4 @@
-import { HttpClient, HttpParams } from '@angular/common/http';
+import { HttpClient, HttpHeaders, HttpParams } from '@angular/common/http';
 import { Injectable, signal } from '@angular/core';
 import { Observable, tap } from 'rxjs';
 
@@ -39,6 +39,11 @@ export interface SchedulerJobsResponse {
 @Injectable({ providedIn: 'root' })
 export class ApiService {
   private readonly baseUrl = '/api';
+  private readonly noCacheHeaders = new HttpHeaders({
+    'Cache-Control': 'no-cache, no-store, must-revalidate',
+    Pragma: 'no-cache',
+    Expires: '0',
+  });
   readonly user = signal<{ username: string; roles: string[] } | null>(this.readUser());
 
   constructor(private readonly http: HttpClient) {}
@@ -59,12 +64,16 @@ export class ApiService {
     this.user.set(null);
   }
 
+  private noCacheOptions(params?: HttpParams) {
+    return { headers: this.noCacheHeaders, params };
+  }
+
   dashboard(): Observable<DashboardSummary> {
-    return this.http.get<DashboardSummary>(`${this.baseUrl}/analytics/dashboard`);
+    return this.http.get<DashboardSummary>(`${this.baseUrl}/analytics/dashboard`, this.noCacheOptions());
   }
 
   workflows(kind: 'running' | 'completed' | 'failed') {
-    return this.http.get<Array<Record<string, unknown>>>(`${this.baseUrl}/workflows/${kind}`);
+    return this.http.get<Array<Record<string, unknown>>>(`${this.baseUrl}/workflows/${kind}`, this.noCacheOptions());
   }
 
   archived(search = '', state = '', page = 1, limit = 10) {
@@ -75,19 +84,19 @@ export class ApiService {
     if (state) {
       params = params.set('state', state);
     }
-    return this.http.get<{ data: Array<Record<string, unknown>>; total: number }>(`${this.baseUrl}/archive/workflows`, { params });
+    return this.http.get<{ data: Array<Record<string, unknown>>; total: number }>(`${this.baseUrl}/archive/workflows`, this.noCacheOptions(params));
   }
 
   archivedDetail(id: string) {
-    return this.http.get<Record<string, unknown>>(`${this.baseUrl}/archive/workflows/${id}`);
+    return this.http.get<Record<string, unknown>>(`${this.baseUrl}/archive/workflows/${id}`, this.noCacheOptions());
   }
 
   incidents() {
-    return this.http.get<Array<Record<string, unknown>>>(`${this.baseUrl}/incidents`);
+    return this.http.get<Array<Record<string, unknown>>>(`${this.baseUrl}/incidents`, this.noCacheOptions());
   }
 
   bpmnExecution(id: string) {
-    return this.http.get<Record<string, unknown>>(`${this.baseUrl}/bpmn-viewer/${id}/execution`);
+    return this.http.get<Record<string, unknown>>(`${this.baseUrl}/bpmn-viewer/${id}/execution`, this.noCacheOptions());
   }
 
   restore(processInstanceId: string, reason: string, includeChildren: boolean) {
@@ -111,11 +120,11 @@ export class ApiService {
   }
 
   schedulerJobs(page = 1, limit = 5) {
-    return this.http.get<SchedulerJobsResponse | SchedulerJob[]>(`${this.baseUrl}/scheduler/jobs`, { params: { page, limit } });
+    return this.http.get<SchedulerJobsResponse | SchedulerJob[]>(`${this.baseUrl}/scheduler/jobs`, this.noCacheOptions(new HttpParams().set('page', page).set('limit', limit)));
   }
 
   schedulerJob(id: string) {
-    return this.http.get<SchedulerJob & { items: Array<Record<string, unknown>>; logs: Array<Record<string, unknown>> }>(`${this.baseUrl}/scheduler/jobs/${id}`);
+    return this.http.get<SchedulerJob & { items: Array<Record<string, unknown>>; logs: Array<Record<string, unknown>> }>(`${this.baseUrl}/scheduler/jobs/${id}`, this.noCacheOptions());
   }
 
   createSchedulerJob(payload: {
@@ -151,11 +160,11 @@ export class ApiService {
       .set('jobType', jobType)
       .set('workflowType', workflowType ?? 'COMPLETED_TO_ARCHIVE')
       .set('rule', rule ?? 'CURRENT');
-    return this.http.get<{ eligibleWorkflowCount: number }>(`${this.baseUrl}/scheduler/preview-count`, { params });
+    return this.http.get<{ eligibleWorkflowCount: number }>(`${this.baseUrl}/scheduler/preview-count`, this.noCacheOptions(params));
   }
 
   schedulerWorkflowStatus() {
-    return this.http.get<Record<string, unknown>>(`${this.baseUrl}/scheduler/workflow-status`);
+    return this.http.get<Record<string, unknown>>(`${this.baseUrl}/scheduler/workflow-status`, this.noCacheOptions());
   }
 
   private readUser() {

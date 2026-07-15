@@ -15,7 +15,7 @@ export class ArchiveController {
   @Get('workflows')
   @ApiOperation({
     summary: 'List archived workflows',
-    description: 'Returns archived workflow history from arc_act_hi_procinst. Supports search, state filtering, and pagination. The web UI uses 10 rows per page.',
+    description: 'Returns archived workflow history from act_hi_procinst. Supports search, state filtering, and pagination. The web UI uses 10 rows per page.',
   })
   @ApiResponse({
     status: 200,

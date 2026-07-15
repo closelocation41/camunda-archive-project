@@ -35,10 +35,18 @@
       <tr>
         @if (isArchivableList()) {
           <td>
-            <input type="checkbox" [checked]="isSelected(id(row))" (change)="toggle(id(row), $any($event.target).checked)" />
+            @if (isRootRow(row)) {
+              <input type="checkbox" [checked]="isSelected(id(row))" (change)="toggle(id(row), $any($event.target).checked)" />
+            }
           </td>
         }
-        <td><a [routerLink]="['/workflow', row['id']]">{{ row['id'] }}</a></td>
+        <td>
+          <span [style.margin-left.px]="rowDepth(row) * 18"></span>
+          @if (rowDepth(row) > 0) {
+            <span class="badge">Child</span>
+          }
+          <a [routerLink]="['/workflow', row['id']]">{{ row['id'] }}</a>
+        </td>
         <td>{{ row['processDefinitionKey'] || row['processDefinitionId'] }}</td>
         <td>{{ row['businessKey'] || '-' }}</td>
         <td>{{ row['startTime'] }}</td>
@@ -52,7 +60,7 @@
         </td>
         <td class="row-actions">
           <a class="btn" [routerLink]="['/workflow', row['id']]">Open</a>
-          @if (isArchivableList()) {
+          @if (isArchivableList() && isRootRow(row)) {
             @if (row['archived']) {
               <button class="btn" (click)="resyncOne(id(row))">Re-sync</button>
             } @else {

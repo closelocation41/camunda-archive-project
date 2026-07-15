@@ -14,10 +14,10 @@ export class AnalyticsService {
       this.scalar(this.camundaDb, 'select count(*)::int from act_hi_procinst where end_time_ is null'),
       this.scalar(this.camundaDb, 'select count(*)::int from act_hi_procinst where end_time_ is not null and delete_reason_ is null'),
       this.scalar(this.camundaDb, 'select count(*)::int from act_hi_procinst where end_time_ is not null and delete_reason_ is not null'),
-      this.scalar(this.archiveDb, 'select count(*)::int from arc_act_hi_procinst where soft_deleted_at is null'),
+      this.scalar(this.archiveDb, 'select count(*)::int from act_hi_procinst where soft_deleted_at is null'),
       this.archiveDb.query(
         `select proc_def_key_, count(*)::int as failures
-         from arc_act_hi_procinst
+         from act_hi_procinst
          where delete_reason_ is not null
          group by proc_def_key_
          order by failures desc
@@ -25,7 +25,7 @@ export class AnalyticsService {
       ),
       this.archiveDb.query(
         `select date_trunc('day', start_time_) as bucket, count(*)::int as total, avg(duration_)::bigint as avg_duration_ms
-         from arc_act_hi_procinst
+         from act_hi_procinst
          group by bucket
          order by bucket desc
          limit 30`,

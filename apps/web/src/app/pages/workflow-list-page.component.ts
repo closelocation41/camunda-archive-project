@@ -57,6 +57,9 @@ export class WorkflowListPageComponent implements OnInit {
   }
 
   toggle(id: string, checked: boolean) {
+    if (!this.isArchivableList()) {
+      return;
+    }
     const next = new Set(this.selected());
     checked ? next.add(id) : next.delete(id);
     this.selected.set(next);
@@ -65,18 +68,22 @@ export class WorkflowListPageComponent implements OnInit {
   toggleAll(checked: boolean) {
     const next = new Set(this.selected());
     for (const row of this.visibleRows()) {
+      if (!this.isRootRow(row)) {
+        continue;
+      }
       checked ? next.add(this.id(row)) : next.delete(this.id(row));
     }
     this.selected.set(next);
   }
 
   visibleRows() {
+    const flattened = this.flattenRows(this.rows());
     const start = (this.page() - 1) * this.pageSize;
-    return this.rows().slice(start, start + this.pageSize);
+    return flattened.slice(start, start + this.pageSize);
   }
 
   totalPages() {
-    return Math.max(1, Math.ceil(this.rows().length / this.pageSize));
+    return Math.max(1, Math.ceil(this.flattenRows(this.rows()).length / this.pageSize));
   }
 
   previousPage() {
@@ -88,14 +95,14 @@ export class WorkflowListPageComponent implements OnInit {
   }
 
   archiveTargets() {
-    return this.rows()
-      .filter((row) => this.selected().has(this.id(row)) && !row['archived'])
+    return this.flattenRows(this.rows())
+      .filter((row) => this.isRootRow(row) && this.selected().has(this.id(row)) && !row['archived'])
       .map((row) => this.id(row));
   }
 
   resyncTargets() {
-    return this.rows()
-      .filter((row) => this.selected().has(this.id(row)) && row['archived'])
+    return this.flattenRows(this.rows())
+      .filter((row) => this.isRootRow(row) && this.selected().has(this.id(row)) && row['archived'])
       .map((row) => this.id(row));
   }
 
@@ -113,6 +120,14 @@ export class WorkflowListPageComponent implements OnInit {
 
   resyncSelected() {
     this.resyncIds(this.resyncTargets());
+  }
+
+  isRootRow(row: Record<string, unknown>) {
+    return !row['parentProcessInstanceId'] && !row['superProcessInstanceId'];
+  }
+
+  rowDepth(row: Record<string, unknown>) {
+    return Number(row['depth'] ?? 0);
   }
 
   private archiveIds(ids: string[]) {
@@ -142,5 +157,33 @@ export class WorkflowListPageComponent implements OnInit {
       },
       error: () => this.message.set('Re-sync failed'),
     });
+  }
+
+  private flattenRows(rows: Array<Record<string, unknown>>): Array<Record<string, unknown>> {
+    const flattened: Array<Record<string, unknown>> = [];
+    const byId = new Map(rows.map((row) => [String(row['id']), row]));
+    const childrenByParent = new Map<string, Array<Record<string, unknown>>>();
+
+    rows.forEach((row) => {
+      const parentId = this.parentProcessInstanceId(row);
+      const key = parentId ? String(parentId) : '__root__';
+      const list = childrenByParent.get(key) ?? [];
+      list.push(row);
+      childrenByParent.set(key, list);
+    });
+
+    const visit = (row: Record<string, unknown>, depth: number) => {
+      flattened.push({ ...row, depth });
+      const childRows = childrenByParent.get(String(row['id'])) ?? [];
+      childRows.forEach((child) => visit(child, depth + 1));
+    };
+
+    rows.filter((row) => !this.parentProcessInstanceId(row)).forEach((row) => visit(row, 0));
+    return flattened;
+  }
+
+  private parentProcessInstanceId(row: Record<string, unknown>) {
+    const raw = row['superProcessInstanceId'] ?? row['parentProcessInstanceId'];
+    return raw ? String(raw) : null;
   }
 }

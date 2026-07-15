@@ -132,10 +132,7 @@ export class SchedulerService implements OnModuleInit {
         workflowType === 'ARCHIVE_TO_COMPLETE'
           ? await this.archiveRepository.findArchivedProcessIds(rule, selectedCount, reservedIds)
           : await this.archiveRepository.findSchedulerProcessIds(mode, rule, selectedCount, reservedIds);
-      const processIds =
-        workflowType === 'ARCHIVE_TO_COMPLETE'
-          ? await this.archiveRepository.filterIndependentArchivedProcessIds(eligibleIds)
-          : await this.archiveRepository.filterIndependentProcessIds(eligibleIds);
+      const processIds = eligibleIds;
       const missingCount = Math.max(0, selectedCount - processIds.length);
       const status = processIds.length ? 'SCHEDULED' : 'FAILED';
       const error = missingCount ? `${missingCount} ${mode.toLowerCase()} workflow(s) not found for requested count ${selectedCount}.` : null;
