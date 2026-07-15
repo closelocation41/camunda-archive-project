@@ -9,7 +9,7 @@ import { CreateSchedulerJobDto } from './dto/create-scheduler-job.dto';
 type SchedulerJobType = 'ARCHIVE_COMPLETED' | 'ARCHIVE_FAILED' | 'ARCHIVE_SUSPENDED';
 type SchedulerJobStatus = 'SCHEDULED' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'PARTIAL' | 'CANCELED';
 type SchedulerWorkflowType = 'COMPLETED_TO_ARCHIVE' | 'ARCHIVE_TO_COMPLETE';
-type SchedulerRule = 'CURRENT' | 'LAST_7_DAYS' | 'LAST_30_DAYS' | 'LAST_90_DAYS' | 'LAST_1_YEAR' | 'ALL';
+type SchedulerRule = 'CURRENT' | 'LAST_7_DAYS' | 'LAST_30_DAYS' | 'ALL';
 
 @Injectable()
 export class SchedulerService implements OnModuleInit {
@@ -116,22 +116,18 @@ export class SchedulerService implements OnModuleInit {
       const mode = this.modeFromJobType(dto.jobType);
       const workflowType = dto.workflowType;
       const rule = dto.rule;
-      const reservedIds = await this.reservedProcessIdsInActiveJobs();
       const eligibleCount =
         workflowType === 'ARCHIVE_TO_COMPLETE'
-          ? await this.archiveRepository.countArchivedProcessIds(rule, reservedIds)
-          : await this.archiveRepository.countSchedulerProcessIds(mode, rule, reservedIds);
-      if (eligibleCount === 0) {
-        throw new BadRequestException('No eligible workflows are available for the selected workflow type and rule.');
-      }
+          ? await this.archiveRepository.countArchivedProcessIds(rule)
+          : await this.archiveRepository.countSchedulerProcessIds(mode, rule);
       if (requestedCount > eligibleCount) {
-        throw new BadRequestException(`Only ${eligibleCount} workflow(s) match the selected rule and are not already reserved in another job. Reduce the requested count or choose a broader rule.`);
+        throw new BadRequestException(`Only ${eligibleCount} workflow(s) match the selected rule. Reduce the requested count or choose a broader rule.`);
       }
       const selectedCount = requestedCount;
       const eligibleIds =
         workflowType === 'ARCHIVE_TO_COMPLETE'
-          ? await this.archiveRepository.findArchivedProcessIds(rule, selectedCount, reservedIds)
-          : await this.archiveRepository.findSchedulerProcessIds(mode, rule, selectedCount, reservedIds);
+          ? await this.archiveRepository.findArchivedProcessIds(rule, selectedCount)
+          : await this.archiveRepository.findSchedulerProcessIds(mode, rule, selectedCount);
       const processIds =
         workflowType === 'ARCHIVE_TO_COMPLETE'
           ? await this.archiveRepository.filterIndependentArchivedProcessIds(eligibleIds)
@@ -308,11 +304,10 @@ export class SchedulerService implements OnModuleInit {
   async previewCount(jobType: SchedulerJobType, workflowType: SchedulerWorkflowType, rule: SchedulerRule) {
     await this.ensureJobSchema();
     const mode = this.modeFromJobType(jobType);
-    const reservedIds = await this.reservedProcessIdsInActiveJobs();
     const eligibleCount =
       workflowType === 'ARCHIVE_TO_COMPLETE'
-        ? await this.archiveRepository.countArchivedProcessIds(rule, reservedIds)
-        : await this.archiveRepository.countSchedulerProcessIds(mode, rule, reservedIds);
+        ? await this.archiveRepository.countArchivedProcessIds(rule)
+        : await this.archiveRepository.countSchedulerProcessIds(mode, rule);
     return { eligibleWorkflowCount: eligibleCount, workflowType, rule, jobType };
   }
 
@@ -563,17 +558,6 @@ export class SchedulerService implements OnModuleInit {
       return 'SUSPENDED';
     }
     return 'COMPLETED';
-  }
-
-  private async reservedProcessIdsInActiveJobs() {
-    const { rows } = await this.archiveDb.query<{ process_instance_id: string }>(
-      `select distinct archive_job_item.process_instance_id
-       from archive_job_item
-       join archive_job on archive_job.id = archive_job_item.archive_job_id
-       where archive_job.status in ('SCHEDULED', 'RUNNING', 'PARTIAL')
-         and archive_job_item.status in ('PENDING', 'RUNNING')`,
-    );
-    return rows.map((row) => row.process_instance_id);
   }
 
   private workflowName(jobType: SchedulerJobType) {

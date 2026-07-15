@@ -12,10 +12,10 @@ export class CreateSchedulerJobDto {
   @IsIn(['COMPLETED_TO_ARCHIVE', 'ARCHIVE_TO_COMPLETE'])
   workflowType: 'COMPLETED_TO_ARCHIVE' | 'ARCHIVE_TO_COMPLETE' = 'COMPLETED_TO_ARCHIVE';
 
-  @ApiPropertyOptional({ enum: ['CURRENT', 'LAST_7_DAYS', 'LAST_30_DAYS', 'LAST_90_DAYS', 'LAST_1_YEAR', 'ALL'], default: 'CURRENT' })
+  @ApiPropertyOptional({ enum: ['CURRENT', 'LAST_7_DAYS', 'LAST_30_DAYS', 'ALL'], default: 'CURRENT' })
   @IsOptional()
-  @IsIn(['CURRENT', 'LAST_7_DAYS', 'LAST_30_DAYS', 'LAST_90_DAYS', 'LAST_1_YEAR', 'ALL'])
-  rule: 'CURRENT' | 'LAST_7_DAYS' | 'LAST_30_DAYS' | 'LAST_90_DAYS' | 'LAST_1_YEAR' | 'ALL' = 'CURRENT';
+  @IsIn(['CURRENT', 'LAST_7_DAYS', 'LAST_30_DAYS', 'ALL'])
+  rule: 'CURRENT' | 'LAST_7_DAYS' | 'LAST_30_DAYS' | 'ALL' = 'CURRENT';
 
   @ApiProperty({ example: 'Nightly completed workflow archive' })
   @IsString()

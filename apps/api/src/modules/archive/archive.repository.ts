@@ -86,11 +86,7 @@ export class ArchiveRepository {
     return rows.map((row) => row.proc_inst_id_);
   }
 
-  async countSchedulerProcessIds(
-    state: 'COMPLETED' | 'FAILED' | 'SUSPENDED',
-    rule: 'CURRENT' | 'LAST_7_DAYS' | 'LAST_30_DAYS' | 'LAST_90_DAYS' | 'LAST_1_YEAR' | 'ALL',
-    excludedProcessIds: string[] = [],
-  ) {
+  async countSchedulerProcessIds(state: 'COMPLETED' | 'FAILED' | 'SUSPENDED', rule: 'CURRENT' | 'LAST_7_DAYS' | 'LAST_30_DAYS' | 'ALL') {
     const stateFilter =
       state === 'COMPLETED'
         ? "end_time_ is not null and delete_reason_ is null"
@@ -98,24 +94,16 @@ export class ArchiveRepository {
           ? "end_time_ is not null and delete_reason_ is not null"
           : "state_ = 'SUSPENDED' and end_time_ is null";
     const timeFilter = this.ruleTimeFilter(rule, 'coalesce(end_time_, start_time_)');
-    const exclusion = this.exclusionFilter(excludedProcessIds, 'proc_inst_id_', 1);
     const { rows } = await this.camundaDb.query<{ count: string }>(
       `select count(*)::text as count
        from act_hi_procinst
        where ${stateFilter}
-         ${timeFilter}
-         ${exclusion.clause}`,
-      exclusion.args,
+         ${timeFilter}`,
     );
     return Number(rows[0]?.count ?? 0);
   }
 
-  async findSchedulerProcessIds(
-    state: 'COMPLETED' | 'FAILED' | 'SUSPENDED',
-    rule: 'CURRENT' | 'LAST_7_DAYS' | 'LAST_30_DAYS' | 'LAST_90_DAYS' | 'LAST_1_YEAR' | 'ALL',
-    limit: number,
-    excludedProcessIds: string[] = [],
-  ) {
+  async findSchedulerProcessIds(state: 'COMPLETED' | 'FAILED' | 'SUSPENDED', rule: 'CURRENT' | 'LAST_7_DAYS' | 'LAST_30_DAYS' | 'ALL', limit: number) {
     const stateFilter =
       state === 'COMPLETED'
         ? "end_time_ is not null and delete_reason_ is null"
@@ -123,55 +111,40 @@ export class ArchiveRepository {
           ? "end_time_ is not null and delete_reason_ is not null"
           : "state_ = 'SUSPENDED' and end_time_ is null";
     const timeFilter = this.ruleTimeFilter(rule, 'coalesce(end_time_, start_time_)');
-    const exclusion = this.exclusionFilter(excludedProcessIds, 'proc_inst_id_', 1);
-    const limitIndex = excludedProcessIds.length ? 2 : 1;
+
     const { rows } = await this.camundaDb.query<{ proc_inst_id_: string }>(
       `select proc_inst_id_
        from act_hi_procinst
        where ${stateFilter}
          ${timeFilter}
-         ${exclusion.clause}
        order by coalesce(end_time_, start_time_) desc
-       limit $${limitIndex}`,
-      [...exclusion.args, limit],
+       limit $1`,
+      [limit],
     );
     return rows.map((row) => row.proc_inst_id_);
   }
 
-  async countArchivedProcessIds(
-    rule: 'CURRENT' | 'LAST_7_DAYS' | 'LAST_30_DAYS' | 'LAST_90_DAYS' | 'LAST_1_YEAR' | 'ALL',
-    excludedProcessIds: string[] = [],
-  ) {
+  async countArchivedProcessIds(rule: 'CURRENT' | 'LAST_7_DAYS' | 'LAST_30_DAYS' | 'ALL') {
     const timeFilter = this.ruleTimeFilter(rule, 'archived_at');
-    const exclusion = this.exclusionFilter(excludedProcessIds, 'proc_inst_id_', 1);
     const { rows } = await this.archiveDb.query<{ count: string }>(
       `select count(*)::text as count
        from arc_act_hi_procinst
        where soft_deleted_at is null
-         ${timeFilter}
-         ${exclusion.clause}`,
-      exclusion.args,
+         ${timeFilter}`,
     );
     return Number(rows[0]?.count ?? 0);
   }
 
-  async findArchivedProcessIds(
-    rule: 'CURRENT' | 'LAST_7_DAYS' | 'LAST_30_DAYS' | 'LAST_90_DAYS' | 'LAST_1_YEAR' | 'ALL',
-    limit: number,
-    excludedProcessIds: string[] = [],
-  ) {
+  async findArchivedProcessIds(rule: 'CURRENT' | 'LAST_7_DAYS' | 'LAST_30_DAYS' | 'ALL', limit: number) {
     const timeFilter = this.ruleTimeFilter(rule, 'archived_at');
-    const exclusion = this.exclusionFilter(excludedProcessIds, 'proc_inst_id_', 1);
-    const limitIndex = excludedProcessIds.length ? 2 : 1;
     const { rows } = await this.archiveDb.query<{ proc_inst_id_: string }>(
       `select proc_inst_id_
        from arc_act_hi_procinst
        where soft_deleted_at is null
          ${timeFilter}
-         ${exclusion.clause}
        order by archived_at desc
-       limit $${limitIndex}`,
-      [...exclusion.args, limit],
+       limit $1`,
+      [limit],
     );
     return rows.map((row) => row.proc_inst_id_);
   }
@@ -251,16 +224,6 @@ export class ArchiveRepository {
     );
     const archived = new Set(rows.map((row) => row.proc_inst_id_));
     return new Map(processIds.map((id) => [id, archived.has(id)]));
-  }
-
-  private exclusionFilter(excludedProcessIds: string[], column: string, startIndex: number) {
-    if (!excludedProcessIds.length) {
-      return { clause: '', args: [] as unknown[] };
-    }
-    return {
-      clause: `and ${column} not in (select unnest($${startIndex}::varchar[]))`,
-      args: [excludedProcessIds],
-    };
   }
 
   async verifyWorkflowReadyForRestore(processIds: string[]) {
@@ -518,21 +481,12 @@ export class ArchiveRepository {
     return columns;
   }
 
-  private ruleTimeFilter(
-    rule: 'CURRENT' | 'LAST_7_DAYS' | 'LAST_30_DAYS' | 'LAST_90_DAYS' | 'LAST_1_YEAR' | 'ALL',
-    column: string,
-  ) {
+  private ruleTimeFilter(rule: 'CURRENT' | 'LAST_7_DAYS' | 'LAST_30_DAYS' | 'ALL', column: string) {
     if (rule === 'LAST_7_DAYS') {
       return `and ${column} >= now() - interval '7 days'`;
     }
     if (rule === 'LAST_30_DAYS') {
       return `and ${column} >= now() - interval '30 days'`;
-    }
-    if (rule === 'LAST_90_DAYS') {
-      return `and ${column} >= now() - interval '90 days'`;
-    }
-    if (rule === 'LAST_1_YEAR') {
-      return `and ${column} >= now() - interval '1 year'`;
     }
     return '';
   }

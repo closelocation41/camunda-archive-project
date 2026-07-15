@@ -1,79 +1,44 @@
-External Permanent Archive for ACT_HI_* History Tables in Camunda 7
-Mapping
-Analyze table mappings.
-Determine whether an extra archive flag is required.
-Identify common relationships in history tables using reference IDs.
-Filter Data
-Filter data based on a date range.
-Implement scheduler/batch processing.
-Possible implementation:
-Node.js Scheduler
-Saga Pattern
-Camunda Workflow
+External permanent archive for ACT_HI_* history tables in Camunda 7
 
-Flow:
+---------------------------
+mapping 
+extra flag 
+common relationship - in history tables or ref id
+----------------------------------
+Filter data -
+-
+scheduler / batch processing
+(Node js/ Saga / Camunda workflow)
 
-Start → Filter by Date Range → Display Archive Data Count → Confirm with User Before Moving to Archive → Archive Process
+start -> filter date Wise -> show archive data count -> confirm with user before move to archive? -> 
 
-API / Performance
-Analyze APIs.
-Perform K6 load testing.
-Implement monitoring tools.
-Analysis
-Analyze Camunda APIs for:
-Running Tasks
-Completed Tasks
-Process Instances
-Historic Process Instances
-Analyze how to re-sync archived Camunda tables.
-Analyze how many tables are required for archiving.
-Implement date range filtering.
-Implement scheduler-based chunk processing.
-Ensure failures are handled gracefully.
-Make sure all related tables are archived correctly.
-Handle scenarios where data movement is interrupted due to:
-Internet issues
-Performance issues
-Server failures
-Consider implementing the archive process using a workflow.
-Create a workflow to archive completed workflows.
-Ensure scheduler jobs handle all dependency workflows properly.
-Create a workflow to restore archived data back to the original Camunda database.
-Handle fault tolerance and recovery scenarios.
-Analyze whether Identity tables are used anywhere and whether they also need to be archived.
-Database Analysis
-Review the database schema:
-https://docs.cibseven.org/manual/2.2/user-guide/process-engine/database/database-schema/
-Verify the mapping between Activity tables and History tables.
-Ensure all History tables (approximately 18 tables) are included.
-Verify whether Identity tables have any relationship with History tables.
-Check the mapping between runtime variables (ACT_RU_VARIABLE) and history variables (ACT_HI_VARINST).
-History Cleanup
 
-Review Camunda History Cleanup functionality:
+api-> K6 -> monitoring tools 
 
-https://docs.cibseven.org/manual/2.2/user-guide/process-engine/history/history-cleanup/
+Data will 
+----------------------------------
 
-Analyze:
+is we are using anywhere 
 
-History Cleanup functionality.
-Whether it can be reused for the archive process.
-Its limitations.
-Documentation
 
-Create documentation for all History tables, including:
+analysis camunda api listing running task /complete task / 
+analysis how to resync camunda tables
+analysis how manay tables need to required for archive data
+date range need to implements 
+sheduler chunks, any kin4d of failer handle grace fully
+make sure all table move properly if any of data pending due to internet issue, performance,use workflow 
+or create a workflow for 
+create a workflow for completed workflow to archive  
+based on sheduler job handle properly error all dependancy workflow 
+create a workflow archive task move to original camunda
+handle foults tolerances
+identity anywhere using 
 
-Table name
-Purpose
-Important columns
-Relationships
-Use cases
-Workflows
 
-Workflow 1
 
-Archive completed workflow history.
 
-Workflow 2
 
-Restore archived workflow data back to the original Camunda database.
+
+
+
+

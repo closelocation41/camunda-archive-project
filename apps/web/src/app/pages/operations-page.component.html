@@ -15,35 +15,35 @@
 
     <label>
       Job type
-      <input type="text" [value]="workflowJobTypeLabel()" disabled />
+      <select name="jobType" [(ngModel)]="form.jobType" (change)="refreshEligibleCount()">
+        <option value="ARCHIVE_COMPLETED">Completed workflow archive</option>
+        <option value="ARCHIVE_FAILED">Failed workflow archive</option>
+        <option value="ARCHIVE_SUSPENDED">Suspended workflow archive</option>
+      </select>
     </label>
 
     <div class="form-row">
       <label>
         Workflow type
-        <select name="workflowType" [(ngModel)]="form.workflowType" (change)="refreshWorkflowType()">
-          <option value="COMPLETED_TO_ARCHIVE">Move completed workflow to archive</option>
-          <option value="ARCHIVE_TO_COMPLETE">Restore archived workflow to complete</option>
+        <select name="workflowType" [(ngModel)]="form.workflowType" (change)="refreshEligibleCount()">
+          <option value="COMPLETED_TO_ARCHIVE">Archive workflow to archive DB</option>
+          <option value="ARCHIVE_TO_COMPLETE">Restore archived workflow to Camunda</option>
         </select>
       </label>
       <label>
         Rule
         <select name="rule" [(ngModel)]="form.rule" (change)="refreshEligibleCount()">
-          <option value="ALL">All</option>
+          <option value="CURRENT">Current</option>
           <option value="LAST_7_DAYS">Last 7 days</option>
           <option value="LAST_30_DAYS">Last 30 days</option>
-          <option value="LAST_90_DAYS">Last 90 days</option>
-          <option value="LAST_1_YEAR">Last 1 year</option>
+          <option value="ALL">All</option>
         </select>
       </label>
     </div>
 
     <label>
       Job name
-      <input name="jobName" [(ngModel)]="form.jobName" placeholder="Nightly completed workflow archive" />
-      @if (jobNameExists()) {
-        <small class="hint danger">Job name must be unique.</small>
-      }
+      <input name="jobName" [(ngModel)]="form.jobName" placeholder="Nightly completed archive" />
     </label>
 
     <div class="form-row">
@@ -52,17 +52,11 @@
         <input name="scheduledStartTime" type="datetime-local" [(ngModel)]="form.scheduledStartTime" />
       </label>
       <label>
-        Eligible workflows
-        <input type="number" [value]="eligibleWorkflowCount() ?? 0" disabled />
-        <small class="hint">Eligible workflows for this rule: {{ eligibleWorkflowCount() ?? 0 }}</small>
-      </label>
-    </div>
-
-    <div class="form-row">
-      <label>
-        Max workflows per job
-        <input name="selectedWorkflowCount" type="number" min="1" [max]="eligibleWorkflowCount() ?? 500" [(ngModel)]="form.selectedWorkflowCount" [disabled]="eligibleWorkflowCount() === 0" />
-        <small class="hint" [class.danger]="!selectedWorkflowCountValid()">Selected workflows cannot exceed eligible workflows.</small>
+        Status details count
+        <input name="selectedWorkflowCount" type="number" min="1" [max]="eligibleWorkflowCount() ?? 500" [(ngModel)]="form.selectedWorkflowCount" />
+        @if (eligibleWorkflowCount() !== null) {
+          <small class="hint" [class.danger]="!canCreateJob()">Eligible workflows for this rule: {{ eligibleWorkflowCount() }}</small>
+        }
       </label>
     </div>
 
@@ -71,7 +65,7 @@
       <button type="button" [class.active]="form.processingMode === 'PARALLEL'" (click)="form.processingMode = 'PARALLEL'">Parallel</button>
     </div>
 
-    <button class="btn primary wide" type="submit" [disabled]="eligibleWorkflowCount() === 0 || !canCreateJob()">Create Job</button>
+    <button class="btn primary wide" type="submit" [disabled]="!canCreateJob()">Create Job</button>
   </form>
 
   <section class="panel details-panel">

@@ -33,7 +33,7 @@ export class OperationsPageComponent implements OnInit, OnDestroy {
   form = {
     jobType: 'ARCHIVE_COMPLETED' as SchedulerJob['jobType'],
     workflowType: 'COMPLETED_TO_ARCHIVE' as SchedulerJob['workflowType'],
-    rule: 'ALL' as SchedulerJob['rule'],
+    rule: 'CURRENT' as SchedulerJob['rule'],
     jobName: 'Nightly completed workflow archive',
     scheduledStartTime: this.toLocalInputValue(new Date()),
     selectedWorkflowCount: 25,
@@ -77,12 +77,6 @@ export class OperationsPageComponent implements OnInit, OnDestroy {
   }
 
   createJob() {
-    if (!this.canCreateJob()) {
-      return;
-    }
-    if (!this.form.jobName?.trim()) {
-      return;
-    }
     this.api
       .createSchedulerJob({
         ...this.form,
@@ -96,44 +90,16 @@ export class OperationsPageComponent implements OnInit, OnDestroy {
       });
   }
 
-  refreshWorkflowType() {
-    this.form.selectedWorkflowCount = 25;
-    this.refreshEligibleCount();
-  }
-
   refreshEligibleCount() {
     this.api.schedulerPreviewCount(this.form.jobType, this.form.workflowType, this.form.rule).subscribe((response) => {
       this.eligibleWorkflowCount.set(response.eligibleWorkflowCount);
-      this.form.selectedWorkflowCount = Math.min(this.form.selectedWorkflowCount, response.eligibleWorkflowCount || 0);
+      this.form.selectedWorkflowCount = Math.min(this.form.selectedWorkflowCount, response.eligibleWorkflowCount);
     });
-  }
-
-  jobNameExists() {
-    const name = this.form.jobName?.trim();
-    return !!name && this.jobs().some((job) => job.jobName.toLowerCase() === name.toLowerCase());
-  }
-
-  selectedWorkflowCountValid() {
-    const eligible = this.eligibleWorkflowCount();
-    return eligible !== null && this.form.selectedWorkflowCount > 0 && this.form.selectedWorkflowCount <= eligible;
   }
 
   canCreateJob() {
     const eligible = this.eligibleWorkflowCount();
-    return (
-      !this.jobNameExists() &&
-      !!this.form.jobName?.trim() &&
-      !!this.form.scheduledStartTime &&
-      eligible !== null &&
-      eligible > 0 &&
-      this.selectedWorkflowCountValid()
-    );
-  }
-
-  workflowJobTypeLabel() {
-    return this.form.workflowType === 'ARCHIVE_TO_COMPLETE'
-      ? 'Restore archived to complete'
-      : 'Move completed to archive';
+    return eligible === null || this.form.selectedWorkflowCount <= eligible;
   }
 
   toggleAutoRefresh() {
