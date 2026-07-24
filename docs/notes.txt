@@ -42,3 +42,6 @@ identity anywhere using
 
 
 
+* is camunda storing any logs during TTL or history cleanup
+* in which table do not have history data , list down all tables names
+
