@@ -1,5 +1,7 @@
 # API Overview
 
+For the full architecture and lifecycle analysis, see [Camunda Data Archiving Project White Paper](WHITE_PAPER.md).
+
 All endpoints are prefixed with `/api`.
 
 Interactive Swagger documentation is available at:

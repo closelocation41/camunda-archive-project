@@ -1,8 +1,11 @@
 # Re-sync Design
 
+For the full architecture and lifecycle analysis, see [Camunda Data Archiving Project White Paper](WHITE_PAPER.md).
+
 The system re-syncs archived workflow history by moving historic rows back into the Camunda history database. It intentionally avoids direct manipulation of Camunda runtime tables.
 
 This is a history restore, not a runtime reconstruction. It does not call Camunda REST process start APIs and does not create a new process instance.
+
 
 ## Flow
 

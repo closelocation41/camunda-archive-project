@@ -1,5 +1,7 @@
 # Operations
 
+For the full architecture and lifecycle analysis, see [Camunda Data Archiving Project White Paper](WHITE_PAPER.md).
+
 ## Scheduled Jobs
 
 The API uses `node-cron` jobs:

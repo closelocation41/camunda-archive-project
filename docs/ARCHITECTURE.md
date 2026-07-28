@@ -1,5 +1,7 @@
 # Architecture
 
+For the full enterprise white paper, see [Camunda Data Archiving Project White Paper](WHITE_PAPER.md).
+
 ```mermaid
 flowchart LR
   camundaDb[(Camunda PostgreSQL DB)]
@@ -91,3 +93,17 @@ Re-sync:
 2. Copy related rows from archive tables into original Camunda history tables.
 3. Delete copied rows from archive tables.
 4. Record the operation in `arc_restore_log`.
+
+## Archive Approaches
+
+The current implementation supports operator-selected archive and scheduler-driven automatic archive.
+
+| Approach | Current behavior |
+| --- | --- |
+| Manual archive | Operators select completed or failed workflows from the UI/API. The API copies related history into archive tables, validates the archive state, deletes copied rows from Camunda history, and records the archive run. |
+| Automatic archive | `node-cron` jobs archive eligible completed, failed, and old suspended workflows using configurable retention windows and batch size. Operator-created scheduler jobs also process selected item counts with progress, retry, and item-level status tracking. |
+| Camunda History Cleanup managed delete | Documented as an optional integration path. The scheduler currently contains a cleanup placeholder; direct delete-after-copy is the active implemented deletion path. |
+
+## Reference Diagrams
+
+The white paper contains the canonical diagrams for high-level architecture, archive lifecycle, restore lifecycle, Camunda History Cleanup, data flow, ERD, and sequence diagrams.
