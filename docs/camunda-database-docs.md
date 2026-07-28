@@ -29,6 +29,35 @@ Camunda runtime tables hold active execution state. When execution events occur,
 
 The archive project uses historic data only. It intentionally does not reconstruct runtime execution trees, timers, active jobs, locks, event subscriptions, or open tasks.
 
+### Detailed Source-to-History Table Mapping
+
+The following table answers where each major `ACT_HI_*` table is populated from. Some history tables are populated from runtime tables, while others are populated by engine services, user API calls, decision evaluation, case execution, or job execution events.
+
+| History Table | Primary Source Table or Engine Source | When History Is Written or Updated | Notes for Archive/Restore |
+| --- | --- | --- | --- |
+| `ACT_HI_PROCINST` | `ACT_RU_EXECUTION`, Process Engine execution lifecycle | Created when a process instance starts; updated when it completes, is deleted, or receives removal time metadata. | Root table for archive selection. |
+| `ACT_HI_ACTINST` | `ACT_RU_EXECUTION`, BPMN activity lifecycle | Created/updated as activities start and end. | Preserves BPMN execution timeline. |
+| `ACT_HI_TASKINST` | `ACT_RU_TASK`, Task Service | Created when a user task is created; updated on assignment, completion, deletion, due date, priority, and related task lifecycle changes. | Completed archive mode checks unfinished task history. |
+| `ACT_HI_VARINST` | `ACT_RU_VARIABLE`, Variable Service | Created/updated when process or task variables are created, changed, or removed depending on history level. | Latest historic variable state. |
+| `ACT_HI_DETAIL` | `ACT_RU_VARIABLE`, form submission, variable update events | Written for detailed variable updates, form properties, and detailed audit events when history level supports it. | Preserves change history, not only latest value. |
+| `ACT_HI_IDENTITYLINK` | `ACT_RU_IDENTITYLINK`, Task/Runtime Identity Link APIs | Written when candidate users/groups, assignees, owners, or participant links are created or changed. | Preserves assignment and participant audit. |
+| `ACT_HI_INCIDENT` | `ACT_RU_INCIDENT`, incident handlers | Created when incidents occur; updated when incidents are resolved or deleted. | Key for failed workflow analysis. |
+| `ACT_HI_JOB_LOG` | `ACT_RU_JOB`, `ACT_RU_TIMER_JOB`, `ACT_RU_DEADLETTER_JOB`, Job Executor | Written when jobs are created, executed, fail, retry, or are deleted. | Logs job activity only; not active job state. |
+| `ACT_HI_EXT_TASK_LOG` | `ACT_RU_EXTERNAL_TASK`, External Task Service | Written for external task create, lock, failure, success, and delete events. | Logs worker interactions; not active lock state. |
+| `ACT_HI_OP_LOG` | User Operation Log / Management Service / Admin operations | Written for operations such as assignment changes, suspension, deletion, retries, priority changes, and admin actions. | Not every automatic engine action is a user operation. |
+| `ACT_HI_COMMENT` | Task Service and Runtime Service comment APIs | Written when users add comments to tasks or process instances. | Often linked by `TASK_ID_` and/or `PROC_INST_ID_`. |
+| `ACT_HI_ATTACHMENT` | Task Service attachment APIs | Written when users add attachments to tasks or process instances. | Attachment content may reference `ACT_GE_BYTEARRAY`. |
+| `ACT_HI_DECINST` | DMN Decision Engine | Written when a decision is evaluated. | Parent table for decision inputs and outputs. |
+| `ACT_HI_DEC_IN` | DMN Decision Engine | Written for decision input values during evaluation. | Related by `DEC_INST_ID_`. |
+| `ACT_HI_DEC_OUT` | DMN Decision Engine | Written for decision output values during evaluation. | Related by `DEC_INST_ID_`. |
+| `ACT_HI_BATCH` | `ACT_RU_BATCH`, Batch framework | Written for batch lifecycle and completion metadata. | Batch rows can be related through operation logs. |
+| `ACT_HI_CASEINST` | CMMN case execution engine | Written when case instances are created and closed. | Optional; depends on CMMN usage. |
+| `ACT_HI_CASEACTINST` | CMMN case activity lifecycle | Written as case activities start/end. | Optional; depends on CMMN usage. |
+| `ACT_HI_CASETASKINST` | CMMN human task lifecycle | Written for CMMN task history. | Optional; depends on CMMN usage. |
+| `ACT_GE_BYTEARRAY` | Engine binary storage, variable serialization, exception stacks, attachments, deployment resources | Not a history table, but stores binary content referenced by history rows. | Archived only when selected history references the binary row. |
+
+Important distinction: history tables are not always direct one-to-one copies of runtime tables. For example, `ACT_HI_JOB_LOG` is an event log produced by the Job Executor, while `ACT_RU_JOB` contains active job state. Similarly, `ACT_HI_OP_LOG` is produced by user/management operations, not by a single runtime table.
+
 ## 3. Implemented Archive Table Mapping
 
 The archive schema mirrors selected Camunda history and binary tables with an `arc_` prefix.
@@ -174,7 +203,58 @@ Archive use:
 - The project copies only byte arrays referenced by selected history records.
 - Repository deployment resources are not broadly archived unless referenced by selected history rows.
 
-## 5. Tables Not Reconstructed by Restore
+## 5. Tables With No History Equivalent
+
+Many Camunda tables either have no history table or only partial historical representation. These tables are not archived as workflow history by this project unless explicitly listed in the archive mapping.
+
+### Repository Tables
+
+Repository tables define deployable artifacts and definitions. They are not workflow execution history.
+
+| Table | Why It Has No Direct History Equivalent |
+| --- | --- |
+| `ACT_RE_DEPLOYMENT` | Deployment metadata is repository state, not process instance history. |
+| `ACT_RE_PROCDEF` | Process definition metadata remains managed by deployment lifecycle. |
+| `ACT_RE_MODEL` | Modeler/design-time artifact, not runtime history. |
+| `ACT_RE_DECISION_DEF` | Decision definition metadata; decision executions are stored separately in `ACT_HI_DECINST`. |
+| `ACT_RE_DECISION_REQ_DEF` | Decision requirements metadata; execution output is stored in decision history tables. |
+| `ACT_RE_CAM_FORM_DEF` | Form definition metadata, not submitted form history. |
+
+### Runtime Tables Without Full History Reconstruction
+
+Some runtime tables have partial logs, but the active runtime state itself is not preserved in history.
+
+| Runtime Table | History Available? | What Is Missing |
+| --- | --- | --- |
+| `ACT_RU_EXECUTION` | Partial | Full live execution tree, concurrent execution hierarchy, active scopes, and runtime tokens. |
+| `ACT_RU_TASK` | Yes, after task history is written | Active task runtime state is not reconstructed by restore. |
+| `ACT_RU_VARIABLE` | Partial | Active variable lifecycle state and transient runtime behavior. |
+| `ACT_RU_JOB` | Logs only | Active job lock, due state, retries, exclusive flags, and executor state. |
+| `ACT_RU_TIMER_JOB` | No full history | Pending timer schedule and active timer state. |
+| `ACT_RU_SUSPENDED_JOB` | No full history | Suspended active job state. |
+| `ACT_RU_DEADLETTER_JOB` | No full history | Dead-letter active job waiting for manual intervention. |
+| `ACT_RU_EXTERNAL_TASK` | Logs only | Active external task lock, worker id, retry state, and topic lock state. |
+| `ACT_RU_EVENT_SUBSCR` | No | Message, signal, compensation, and conditional subscriptions. |
+| `ACT_RU_JOBDEF` | No | Job definition runtime metadata. |
+| `ACT_RU_AUTHORIZATION` | No | Runtime authorization data. |
+| `ACT_RU_FILTER` | No | Saved filters. |
+| `ACT_RU_METER_LOG` | Already a log table | Metrics are operational logs, not process history to restore. |
+
+### Identity, General, and Engine Metadata Tables
+
+| Table | Why It Is Not Archived as Workflow History |
+| --- | --- |
+| `ACT_ID_USER` | Enterprise identity master data. |
+| `ACT_ID_GROUP` | Enterprise identity master data. |
+| `ACT_ID_MEMBERSHIP` | User/group master relationship. |
+| `ACT_ID_TENANT` | Tenant master data. |
+| `ACT_ID_TENANT_MEMBER` | Tenant membership master data. |
+| `ACT_ID_INFO` | Identity profile data. |
+| `ACT_GE_PROPERTY` | Engine configuration and internal properties. |
+| `ACT_GE_SCHEMA_LOG` | Schema migration/version log. |
+| `ACT_GE_BYTEARRAY` | General binary store; archived only when referenced by selected history rows. |
+
+## 6. Tables Not Reconstructed by Restore
 
 The restore process does not rebuild active runtime state or repository metadata. The following categories are out of scope:
 
@@ -187,7 +267,7 @@ The restore process does not rebuild active runtime state or repository metadata
 | Identity data | `ACT_ID_USER`, `ACT_ID_GROUP`, `ACT_ID_MEMBERSHIP`, `ACT_ID_TENANT` | Identity is enterprise master data, not workflow history. |
 | Engine metadata | `ACT_GE_PROPERTY`, `ACT_GE_SCHEMA_LOG` | Engine configuration and schema state are not archived as workflow history. |
 
-## 6. Archive and Restore Database Rules
+## 7. Archive and Restore Database Rules
 
 The implementation follows these rules:
 
@@ -201,7 +281,7 @@ The implementation follows these rules:
 8. Duplicate inserts are ignored with `on conflict do nothing`.
 9. Archive and restore operations are logged in archive metadata tables.
 
-## 7. Logical ERD
+## 8. Logical ERD
 
 ```mermaid
 erDiagram
@@ -224,7 +304,7 @@ erDiagram
   ARC_RESTORE_LOG ||--o{ ARC_PROC_INST_MAPPING : "RESTORE_LOG_ID"
 ```
 
-## 8. Source Files
+## 9. Source Files
 
 - Archive schema: `infra/db/001_archive_schema.sql`
 - Archive repository: `apps/api/src/modules/archive/archive.repository.ts`

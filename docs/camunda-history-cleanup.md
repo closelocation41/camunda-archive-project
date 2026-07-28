@@ -135,6 +135,30 @@ Camunda does not create a dedicated history cleanup audit table listing every de
 | Deleted row counts | Usually engine logs, depending on logging configuration. |
 | Deleted process ids | Not stored by Camunda as a built-in cleanup audit trail. |
 
+### What Camunda Stores During TTL and Cleanup
+
+TTL and cleanup information is split across configuration, runtime job records, historic job logs, and application logs.
+
+| Question | Answer |
+| --- | --- |
+| Is TTL stored per process instance? | Not as the original TTL value. Camunda stores the calculated cleanup eligibility timestamp in `REMOVAL_TIME_` on supported history tables. |
+| Where is TTL configured? | On process, decision, or case definitions. In the database this is definition metadata, for example process definition metadata related to `ACT_RE_PROCDEF`. |
+| Does Camunda store cleanup jobs? | Yes. Pending cleanup jobs are stored in runtime job tables such as `ACT_RU_JOB` while waiting for execution. |
+| Does Camunda store cleanup execution logs? | Partially. Because cleanup runs as a background job, execution success or failure can appear in `ACT_HI_JOB_LOG` and in engine application logs. |
+| Does Camunda store deleted record details? | No. Camunda does not keep a built-in table containing every deleted process id, table name, or row id removed by cleanup. |
+| Does Camunda store row counts deleted by cleanup? | Usually only in engine logs, depending on logging level and Camunda version/configuration. |
+| Can the archive project audit deleted rows? | Yes. The archive project records archive and restore activity in archive-owned tables before rows are removed from Camunda history. |
+
+### Cleanup Log Locations
+
+| Location | Table or Source | Stored Data | Limitation |
+| --- | --- | --- | --- |
+| Runtime job queue | `ACT_RU_JOB` | Pending cleanup job id, due date, retries, priority, and handler metadata. | Exists only while the job is pending or retrying. |
+| Historic job log | `ACT_HI_JOB_LOG` | Job execution events, failure messages, retries, exception stack reference, and timestamps. | Does not list every deleted history row. |
+| Binary exception content | `ACT_GE_BYTEARRAY` | Exception stack traces referenced by job logs. | Only present when an exception stack or binary payload is stored. |
+| Engine application logs | Camunda application log files | Cleanup start/end messages, failure details, and sometimes deleted counts. | Log retention and format are environment-specific. |
+| Archive audit trail | `arc_archive_run`, `archive_job`, `archive_job_item`, `archive_job_retry_history` | Project-level archive selection, status, counts, item results, retries, and errors. | Owned by this project, not native Camunda cleanup. |
+
 For this archive project, the reliable audit trail is the archive database:
 
 - `arc_archive_run`
