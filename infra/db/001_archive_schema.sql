@@ -254,6 +254,112 @@ CREATE TABLE IF NOT EXISTS arc_act_hi_detail (
   soft_deleted_at timestamptz
 );
 
+CREATE TABLE IF NOT EXISTS arc_act_hi_identitylink (
+  id_ varchar(64) PRIMARY KEY,
+  timestamp_ timestamptz,
+  type_ varchar(255),
+  user_id_ varchar(255),
+  group_id_ varchar(255),
+  task_id_ varchar(64),
+  root_proc_inst_id_ varchar(64),
+  proc_def_id_ varchar(64),
+  proc_def_key_ varchar(255),
+  operation_type_ varchar(64),
+  assigner_id_ varchar(64),
+  tenant_id_ varchar(64),
+  removal_time_ timestamptz,
+  archived_at timestamptz NOT NULL DEFAULT now(),
+  archive_run_id uuid REFERENCES arc_archive_run(id),
+  soft_deleted_at timestamptz
+);
+
+CREATE TABLE IF NOT EXISTS arc_act_hi_decinst (
+  id_ varchar(64) PRIMARY KEY,
+  dec_def_id_ varchar(64),
+  dec_def_key_ varchar(255),
+  dec_def_name_ varchar(255),
+  proc_def_key_ varchar(255),
+  proc_def_id_ varchar(64),
+  proc_inst_id_ varchar(64),
+  case_def_key_ varchar(255),
+  case_def_id_ varchar(64),
+  case_inst_id_ varchar(64),
+  act_inst_id_ varchar(64),
+  act_id_ varchar(255),
+  eval_time_ timestamptz,
+  removal_time_ timestamptz,
+  collect_value_ double precision,
+  user_id_ varchar(255),
+  root_proc_inst_id_ varchar(64),
+  dec_req_id_ varchar(64),
+  dec_req_key_ varchar(255),
+  tenant_id_ varchar(64),
+  archived_at timestamptz NOT NULL DEFAULT now(),
+  archive_run_id uuid REFERENCES arc_archive_run(id),
+  soft_deleted_at timestamptz
+);
+
+CREATE TABLE IF NOT EXISTS arc_act_hi_dec_in (
+  id_ varchar(64) PRIMARY KEY,
+  dec_inst_id_ varchar(64),
+  clause_id_ varchar(64),
+  clause_name_ varchar(255),
+  var_type_ varchar(100),
+  bytearray_id_ varchar(64),
+  double_ double precision,
+  long_ bigint,
+  text_ text,
+  text2_ text,
+  tenant_id_ varchar(64),
+  create_time_ timestamptz,
+  root_proc_inst_id_ varchar(64),
+  removal_time_ timestamptz,
+  archived_at timestamptz NOT NULL DEFAULT now(),
+  archive_run_id uuid REFERENCES arc_archive_run(id),
+  soft_deleted_at timestamptz
+);
+
+CREATE TABLE IF NOT EXISTS arc_act_hi_dec_out (
+  id_ varchar(64) PRIMARY KEY,
+  dec_inst_id_ varchar(64),
+  clause_id_ varchar(64),
+  clause_name_ varchar(255),
+  rule_id_ varchar(64),
+  rule_order_ integer,
+  var_name_ varchar(255),
+  var_type_ varchar(100),
+  bytearray_id_ varchar(64),
+  double_ double precision,
+  long_ bigint,
+  text_ text,
+  text2_ text,
+  tenant_id_ varchar(64),
+  create_time_ timestamptz,
+  root_proc_inst_id_ varchar(64),
+  removal_time_ timestamptz,
+  archived_at timestamptz NOT NULL DEFAULT now(),
+  archive_run_id uuid REFERENCES arc_archive_run(id),
+  soft_deleted_at timestamptz
+);
+
+CREATE TABLE IF NOT EXISTS arc_act_hi_batch (
+  id_ varchar(64) PRIMARY KEY,
+  type_ varchar(255),
+  total_jobs_ integer,
+  jobs_per_seed_ integer,
+  invocations_per_job_ integer,
+  seed_job_def_id_ varchar(64),
+  monitor_job_def_id_ varchar(64),
+  batch_job_def_id_ varchar(64),
+  tenant_id_ varchar(64),
+  start_time_ timestamptz,
+  end_time_ timestamptz,
+  removal_time_ timestamptz,
+  archived_at timestamptz NOT NULL DEFAULT now(),
+  archive_run_id uuid REFERENCES arc_archive_run(id),
+  soft_deleted_at timestamptz
+);
+
 CREATE TABLE IF NOT EXISTS arc_act_hi_incident (
   id_ varchar(64) PRIMARY KEY,
   proc_def_key_ varchar(255),
@@ -275,6 +381,95 @@ CREATE TABLE IF NOT EXISTS arc_act_hi_incident (
   removal_time_ timestamptz,
   history_configuration_ text,
   failed_activity_id_ varchar(255),
+  archived_at timestamptz NOT NULL DEFAULT now(),
+  archive_run_id uuid REFERENCES arc_archive_run(id),
+  soft_deleted_at timestamptz
+);
+
+CREATE TABLE IF NOT EXISTS arc_act_hi_ext_task_log (
+  id_ varchar(64) PRIMARY KEY,
+  timestamp_ timestamptz NOT NULL,
+  ext_task_id_ varchar(64),
+  retries_ integer,
+  topic_name_ varchar(255),
+  worker_id_ varchar(255),
+  priority_ bigint,
+  error_msg_ text,
+  error_details_id_ varchar(64),
+  act_id_ varchar(255),
+  act_inst_id_ varchar(64),
+  execution_id_ varchar(64),
+  root_proc_inst_id_ varchar(64),
+  proc_inst_id_ varchar(64),
+  proc_def_id_ varchar(64),
+  proc_def_key_ varchar(255),
+  tenant_id_ varchar(64),
+  state_ integer,
+  removal_time_ timestamptz,
+  archived_at timestamptz NOT NULL DEFAULT now(),
+  archive_run_id uuid REFERENCES arc_archive_run(id),
+  soft_deleted_at timestamptz
+);
+
+CREATE TABLE IF NOT EXISTS arc_act_hi_caseinst (
+  id_ varchar(64) PRIMARY KEY,
+  case_inst_id_ varchar(64),
+  business_key_ varchar(255),
+  case_def_id_ varchar(64),
+  create_time_ timestamptz,
+  close_time_ timestamptz,
+  duration_ bigint,
+  state_ integer,
+  create_user_id_ varchar(255),
+  super_case_instance_id_ varchar(64),
+  super_process_instance_id_ varchar(64),
+  tenant_id_ varchar(64),
+  archived_at timestamptz NOT NULL DEFAULT now(),
+  archive_run_id uuid REFERENCES arc_archive_run(id),
+  soft_deleted_at timestamptz
+);
+
+CREATE TABLE IF NOT EXISTS arc_act_hi_caseactinst (
+  id_ varchar(64) PRIMARY KEY,
+  parent_act_inst_id_ varchar(64),
+  case_def_id_ varchar(64),
+  case_inst_id_ varchar(64),
+  case_act_id_ varchar(255),
+  task_id_ varchar(64),
+  call_proc_inst_id_ varchar(64),
+  call_case_inst_id_ varchar(64),
+  case_act_name_ varchar(255),
+  case_act_type_ varchar(255),
+  create_time_ timestamptz,
+  end_time_ timestamptz,
+  duration_ bigint,
+  state_ integer,
+  required_ boolean,
+  tenant_id_ varchar(64),
+  archived_at timestamptz NOT NULL DEFAULT now(),
+  archive_run_id uuid REFERENCES arc_archive_run(id),
+  soft_deleted_at timestamptz
+);
+
+CREATE TABLE IF NOT EXISTS arc_act_hi_casetaskinst (
+  id_ varchar(64) PRIMARY KEY,
+  case_def_id_ varchar(64),
+  case_inst_id_ varchar(64),
+  case_execution_id_ varchar(64),
+  task_id_ varchar(64),
+  name_ varchar(255),
+  parent_task_id_ varchar(64),
+  description_ text,
+  owner_ varchar(255),
+  assignee_ varchar(255),
+  create_time_ timestamptz,
+  end_time_ timestamptz,
+  duration_ bigint,
+  delete_reason_ text,
+  priority_ integer,
+  due_date_ timestamptz,
+  follow_up_date_ timestamptz,
+  tenant_id_ varchar(64),
   archived_at timestamptz NOT NULL DEFAULT now(),
   archive_run_id uuid REFERENCES arc_archive_run(id),
   soft_deleted_at timestamptz
@@ -408,8 +603,17 @@ CREATE INDEX IF NOT EXISTS idx_arc_actinst_proc ON arc_act_hi_actinst (proc_inst
 CREATE INDEX IF NOT EXISTS idx_arc_task_proc ON arc_act_hi_taskinst (proc_inst_id_, start_time_);
 CREATE INDEX IF NOT EXISTS idx_arc_var_proc_name ON arc_act_hi_varinst (proc_inst_id_, name_);
 CREATE INDEX IF NOT EXISTS idx_arc_detail_proc_time ON arc_act_hi_detail (proc_inst_id_, time_);
+CREATE INDEX IF NOT EXISTS idx_arc_identitylink_root ON arc_act_hi_identitylink (root_proc_inst_id_, timestamp_);
+CREATE INDEX IF NOT EXISTS idx_arc_decinst_proc ON arc_act_hi_decinst (proc_inst_id_, eval_time_);
+CREATE INDEX IF NOT EXISTS idx_arc_dec_in_inst ON arc_act_hi_dec_in (dec_inst_id_);
+CREATE INDEX IF NOT EXISTS idx_arc_dec_out_inst ON arc_act_hi_dec_out (dec_inst_id_);
+CREATE INDEX IF NOT EXISTS idx_arc_batch_start ON arc_act_hi_batch (start_time_);
 CREATE INDEX IF NOT EXISTS idx_arc_incident_proc ON arc_act_hi_incident (proc_inst_id_, create_time_);
 CREATE INDEX IF NOT EXISTS idx_arc_job_log_proc ON arc_act_hi_job_log (process_instance_id_, timestamp_);
+CREATE INDEX IF NOT EXISTS idx_arc_ext_task_proc ON arc_act_hi_ext_task_log (proc_inst_id_, timestamp_);
+CREATE INDEX IF NOT EXISTS idx_arc_caseinst_super_proc ON arc_act_hi_caseinst (super_process_instance_id_, create_time_);
+CREATE INDEX IF NOT EXISTS idx_arc_caseact_case ON arc_act_hi_caseactinst (case_inst_id_, create_time_);
+CREATE INDEX IF NOT EXISTS idx_arc_casetask_case ON arc_act_hi_casetaskinst (case_inst_id_, create_time_);
 CREATE INDEX IF NOT EXISTS idx_arc_op_log_proc ON arc_act_hi_op_log (proc_inst_id_, timestamp_);
 CREATE INDEX IF NOT EXISTS idx_arc_restore_original ON arc_restore_log (original_proc_inst_id, requested_at DESC);
 CREATE INDEX IF NOT EXISTS idx_arc_audit_created ON arc_audit_log (created_at DESC);

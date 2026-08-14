@@ -40,7 +40,7 @@ services:
       timeout: 5s
       retries: 10
 
-  camunda-db:
+  camunda-db: 
     image: postgres:16-alpine
     environment:
       POSTGRES_DB: camunda

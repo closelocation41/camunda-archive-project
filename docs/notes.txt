@@ -40,9 +40,54 @@ identity anywhere using
 
 
 
-
+Session 4 -
 
 * is camunda storing any logs during TTL or history cleanup
 * in which table do not have history data , list down all tables names
 * update all history tables in archive camunda
+
+
+
+Session 5 -
+We need to verify twise table mapping
+Re verify - ACT_RU_VARIABLE	Partial	Active variable lifecycle state and transient runtime behavior.
+* in which table do not have history data , list down all tables names
+byte array table cross check relationship of hi tables
+which approch? 
+
+ 
+
+
+
+------------------------------------------------------------
+Camunda Archiving – Analysis Points
+• Identify all Camunda history tables required for archiving. 
+• Identify table relationships and dependencies. 
+• Define source table → target archive table mapping. 
+• Provide date range and filter for selecting data. 
+• Select only completed tasks/process instances. 
+• Check whether current application has any dependency on history data. 
+• Check custom queries, reports, APIs, or tables using ACT_HI_* data. 
+• Handle ACT_GE_BYTEARRAY / BYTEARRAY_ID_ as a special case. 
+• Check shared byte-array references before deleting. 
+• Check failed jobs, incidents, running/suspended processes before archiving. 
+• Follow manual flow: 
+Filter → Select → Archive → Validate → Delete → Store Logs
+• Validate source vs. archive record counts. 
+• Validate all relationships and references. 
+• Validate byte-array data. 
+• Store complete archival/audit logs. 
+• Logs should include batch ID, date range, filters, process/task IDs, tables, record counts, status, errors, and timestamps. 
+• If archive/validation fails, do not delete source data. 
+• If any batch/job fails, rollback the archive operation where possible. 
+• Prepare complete documentation for: 
+◦ Table mapping 
+◦ Dependencies 
+◦ Archive sequence 
+◦ Delete sequence 
+◦ Validation 
+◦ Rollback 
+◦ Audit logging 
+◦ Edge cases 
+
 

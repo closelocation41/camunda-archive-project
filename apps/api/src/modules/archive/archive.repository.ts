@@ -9,8 +9,17 @@ const HISTORY_TABLES = [
   ['act_hi_taskinst', 'arc_act_hi_taskinst'],
   ['act_hi_varinst', 'arc_act_hi_varinst'],
   ['act_hi_detail', 'arc_act_hi_detail'],
+  ['act_hi_identitylink', 'arc_act_hi_identitylink'],
+  ['act_hi_decinst', 'arc_act_hi_decinst'],
+  ['act_hi_dec_in', 'arc_act_hi_dec_in'],
+  ['act_hi_dec_out', 'arc_act_hi_dec_out'],
+  ['act_hi_batch', 'arc_act_hi_batch'],
   ['act_hi_incident', 'arc_act_hi_incident'],
   ['act_hi_job_log', 'arc_act_hi_job_log'],
+  ['act_hi_ext_task_log', 'arc_act_hi_ext_task_log'],
+  ['act_hi_caseinst', 'arc_act_hi_caseinst'],
+  ['act_hi_caseactinst', 'arc_act_hi_caseactinst'],
+  ['act_hi_casetaskinst', 'arc_act_hi_casetaskinst'],
   ['act_ge_bytearray', 'arc_act_ge_bytearray'],
   ['act_hi_op_log', 'arc_act_hi_op_log'],
   ['act_hi_attachment', 'arc_act_hi_attachment'],
@@ -307,7 +316,18 @@ export class ArchiveRepository {
       await archiveClient.query('begin');
       await camundaClient.query('begin');
       for (const [source, target] of HISTORY_TABLES) {
-        const { rows } = await camundaClient.query(`select * from ${source} where ${this.processFilter(source, false)}`, [processIds]);
+        if (!(await this.tableExists(camundaClient, source))) {
+          continue;
+        }
+        await this.ensureArchiveTable(camundaClient, archiveClient, source, target);
+        const predicate = await this.processFilter(camundaClient, source, false);
+        if (!predicate) {
+          continue;
+        }
+        const { rows } = await camundaClient.query(`select * from ${source} where ${predicate}`, [processIds]);
+        if (!rows.length) {
+          continue;
+        }
         const targetColumns = await this.tableColumns(archiveClient, target);
         for (const row of rows) {
           const columns = this.insertableColumns(row, targetColumns);
@@ -349,7 +369,17 @@ export class ArchiveRepository {
       await archiveClient.query('begin');
       await camundaClient.query('begin');
       for (const [target, source] of HISTORY_TABLES) {
-        const { rows } = await archiveClient.query(`select * from ${source} where ${this.processFilter(source, true)}`, [processIds]);
+        if (!(await this.tableExists(archiveClient, source)) || !(await this.tableExists(camundaClient, target))) {
+          continue;
+        }
+        const predicate = await this.processFilter(archiveClient, source, true);
+        if (!predicate) {
+          continue;
+        }
+        const { rows } = await archiveClient.query(`select * from ${source} where ${predicate}`, [processIds]);
+        if (!rows.length) {
+          continue;
+        }
         const targetColumns = await this.tableColumns(camundaClient, target);
         for (const row of rows) {
           const columns = this.insertableColumns(row, targetColumns);
@@ -430,19 +460,102 @@ export class ArchiveRepository {
     };
   }
 
-  private processFilter(table: string, archive: boolean) {
-    if (table.endsWith('act_hi_job_log')) {
+  private async processFilter(client: PoolClient, table: string, archive: boolean): Promise<string | null> {
+    const columns = await this.tableColumns(client, table);
+
+    if (table.endsWith('act_hi_job_log') && columns.has('process_instance_id_')) {
       return 'process_instance_id_ = any($1)';
     }
     if (table.endsWith('act_ge_bytearray')) {
       const prefix = archive ? 'arc_' : '';
-      return `id_ in (
-        select bytearray_id_ from ${prefix}act_hi_varinst where proc_inst_id_ = any($1) and bytearray_id_ is not null
-        union select bytearray_id_ from ${prefix}act_hi_detail where proc_inst_id_ = any($1) and bytearray_id_ is not null
-        union select job_exception_stack_id_ from ${prefix}act_hi_job_log where process_instance_id_ = any($1) and job_exception_stack_id_ is not null
+      const unionParts = [
+        `select bytearray_id_ from ${prefix}act_hi_varinst where proc_inst_id_ = any($1) and bytearray_id_ is not null`,
+        `select bytearray_id_ from ${prefix}act_hi_detail where proc_inst_id_ = any($1) and bytearray_id_ is not null`,
+        `select job_exception_stack_id_ from ${prefix}act_hi_job_log where process_instance_id_ = any($1) and job_exception_stack_id_ is not null`,
+      ];
+      if (await this.tableExists(client, `${prefix}act_hi_dec_in`)) {
+        const decisionInputFilter = await this.processFilter(client, `${prefix}act_hi_dec_in`, archive);
+        if (decisionInputFilter) {
+          unionParts.push(`select bytearray_id_ from ${prefix}act_hi_dec_in where ${decisionInputFilter} and bytearray_id_ is not null`);
+        }
+      }
+      if (await this.tableExists(client, `${prefix}act_hi_dec_out`)) {
+        const decisionOutputFilter = await this.processFilter(client, `${prefix}act_hi_dec_out`, archive);
+        if (decisionOutputFilter) {
+          unionParts.push(`select bytearray_id_ from ${prefix}act_hi_dec_out where ${decisionOutputFilter} and bytearray_id_ is not null`);
+        }
+      }
+      if (await this.tableExists(client, `${prefix}act_hi_ext_task_log`)) {
+        const externalTaskFilter = await this.processFilter(client, `${prefix}act_hi_ext_task_log`, archive);
+        if (externalTaskFilter) {
+          unionParts.push(`select error_details_id_ from ${prefix}act_hi_ext_task_log where ${externalTaskFilter} and error_details_id_ is not null`);
+        }
+      }
+      if (await this.tableExists(client, `${prefix}act_hi_attachment`)) {
+        const attachmentFilter = await this.processFilter(client, `${prefix}act_hi_attachment`, archive);
+        if (attachmentFilter) {
+          unionParts.push(`select content_id_ from ${prefix}act_hi_attachment where ${attachmentFilter} and content_id_ is not null`);
+        }
+      }
+      return `id_ in (${unionParts.join(' union ')})`;
+    }
+    if (table.endsWith('act_hi_dec_in') || table.endsWith('act_hi_dec_out')) {
+      const prefix = archive ? 'arc_' : '';
+      if (!(await this.tableExists(client, `${prefix}act_hi_decinst`))) {
+        return null;
+      }
+      const decisionFilter = await this.processFilter(client, `${prefix}act_hi_decinst`, archive);
+      if (!decisionFilter) {
+        return null;
+      }
+      return `dec_inst_id_ in (
+        select id_ from ${prefix}act_hi_decinst
+        where ${decisionFilter}
       )`;
     }
-    return 'proc_inst_id_ = any($1)';
+    if (table.endsWith('act_hi_batch')) {
+      const prefix = archive ? 'arc_' : '';
+      if (!(await this.tableExists(client, `${prefix}act_hi_op_log`))) {
+        return null;
+      }
+      const operationFilter = await this.processFilter(client, `${prefix}act_hi_op_log`, archive);
+      if (!operationFilter) {
+        return null;
+      }
+      return `id_ in (
+        select batch_id_ from ${prefix}act_hi_op_log where ${operationFilter} and batch_id_ is not null
+      )`;
+    }
+    if (table.endsWith('act_hi_caseinst')) {
+      const prefix = archive ? 'arc_' : '';
+      return `id_ in (
+        select case_inst_id_ from ${prefix}act_hi_procinst where proc_inst_id_ = any($1) and case_inst_id_ is not null
+        union select super_case_instance_id_ from ${prefix}act_hi_procinst where proc_inst_id_ = any($1) and super_case_instance_id_ is not null
+      )`;
+    }
+    if (table.endsWith('act_hi_caseactinst') || table.endsWith('act_hi_casetaskinst')) {
+      const prefix = archive ? 'arc_' : '';
+      return `case_inst_id_ in (
+        select case_inst_id_ from ${prefix}act_hi_procinst where proc_inst_id_ = any($1) and case_inst_id_ is not null
+        union select super_case_instance_id_ from ${prefix}act_hi_procinst where proc_inst_id_ = any($1) and super_case_instance_id_ is not null
+      )`;
+    }
+    if (columns.has('proc_inst_id_')) {
+      return 'proc_inst_id_ = any($1)';
+    }
+    if (columns.has('root_proc_inst_id_')) {
+      return 'root_proc_inst_id_ = any($1)';
+    }
+    if (columns.has('process_instance_id_')) {
+      return 'process_instance_id_ = any($1)';
+    }
+    if (columns.has('task_id_')) {
+      const prefix = archive ? 'arc_' : '';
+      return `task_id_ in (
+        select id_ from ${prefix}act_hi_taskinst where proc_inst_id_ = any($1)
+      )`;
+    }
+    return null;
   }
 
   private insertableColumns(row: Record<string, unknown>, targetColumns: Set<string>) {
@@ -454,14 +567,58 @@ export class ArchiveRepository {
     const procInstTable = archive ? 'arc_act_hi_procinst' : 'act_hi_procinst';
     const byteArrayTable = archive ? 'arc_act_ge_bytearray' : 'act_ge_bytearray';
     const deleteOrder = [
-      byteArrayTable,
       ...tables.filter((table) => table !== byteArrayTable && table !== procInstTable),
+      byteArrayTable,
       procInstTable,
     ];
 
     for (const table of deleteOrder) {
-      await client.query(`delete from ${table} where ${this.processFilter(table, archive)}`, [processIds]);
+      if (!(await this.tableExists(client, table))) {
+        continue;
+      }
+      const predicate = await this.processFilter(client, table, archive);
+      if (!predicate) {
+        continue;
+      }
+      await client.query(`delete from ${table} where ${predicate}`, [processIds]);
     }
+  }
+
+  private async ensureArchiveTable(sourceClient: PoolClient, archiveClient: PoolClient, sourceTable: string, targetTable: string) {
+    const sourceColumns = await this.columnDefinitions(sourceClient, sourceTable);
+    await archiveClient.query(
+      `create table if not exists ${targetTable} (
+        ${sourceColumns.map((column) => `${column.name} ${column.type}`).join(', ')},
+        archived_at timestamptz NOT NULL DEFAULT now(),
+        archive_run_id uuid,
+        soft_deleted_at timestamptz
+      )`,
+    );
+    const targetColumns = await this.tableColumns(archiveClient, targetTable);
+
+    for (const column of sourceColumns) {
+      if (!targetColumns.has(column.name)) {
+        await archiveClient.query(`alter table ${targetTable} add column ${column.name} ${column.type}`);
+      }
+    }
+
+    const metadataColumns = [
+      ['archived_at', 'timestamptz NOT NULL DEFAULT now()'],
+      ['archive_run_id', 'uuid'],
+      ['soft_deleted_at', 'timestamptz'],
+    ] as const;
+    for (const [column, type] of metadataColumns) {
+      if (!targetColumns.has(column)) {
+        await archiveClient.query(`alter table ${targetTable} add column ${column} ${type}`);
+      }
+    }
+
+    this.columnCache.delete(targetTable);
+  }
+
+  private async tableExists(client: PoolClient, tableName: string) {
+    const { rows } = await client.query<{ exists: boolean }>('select to_regclass($1) is not null as exists', [tableName]);
+    return rows[0]?.exists ?? false;
   }
 
   private async tableColumns(client: PoolClient, tableName: string) {
@@ -479,6 +636,61 @@ export class ArchiveRepository {
     const columns = new Set(rows.map((row) => row.column_name));
     this.columnCache.set(tableName, columns);
     return columns;
+  }
+
+  private async columnDefinitions(client: PoolClient, tableName: string) {
+    const { rows } = await client.query<{
+      column_name: string;
+      data_type: string;
+      udt_name: string;
+      character_maximum_length: number | null;
+      numeric_precision: number | null;
+      numeric_scale: number | null;
+      datetime_precision: number | null;
+    }>(
+      `select column_name, data_type, udt_name, character_maximum_length,
+              numeric_precision, numeric_scale, datetime_precision
+       from information_schema.columns
+       where table_schema = 'public' and table_name = $1
+       order by ordinal_position`,
+      [tableName],
+    );
+    return rows.map((row) => ({ name: row.column_name, type: this.columnType(row) }));
+  }
+
+  private columnType(column: {
+    data_type: string;
+    udt_name: string;
+    character_maximum_length: number | null;
+    numeric_precision: number | null;
+    numeric_scale: number | null;
+    datetime_precision: number | null;
+  }) {
+    if (column.data_type === 'character varying') {
+      return column.character_maximum_length ? `varchar(${column.character_maximum_length})` : 'varchar';
+    }
+    if (column.data_type === 'character') {
+      return column.character_maximum_length ? `char(${column.character_maximum_length})` : 'char';
+    }
+    if (column.data_type === 'numeric' || column.data_type === 'decimal') {
+      if (column.numeric_precision && column.numeric_scale !== null) {
+        return `numeric(${column.numeric_precision}, ${column.numeric_scale})`;
+      }
+      return column.data_type;
+    }
+    if (column.data_type === 'timestamp with time zone') {
+      return column.datetime_precision !== null ? `timestamptz(${column.datetime_precision})` : 'timestamptz';
+    }
+    if (column.data_type === 'timestamp without time zone') {
+      return column.datetime_precision !== null ? `timestamp(${column.datetime_precision})` : 'timestamp';
+    }
+    if (column.data_type === 'USER-DEFINED') {
+      return column.udt_name;
+    }
+    if (column.data_type === 'ARRAY') {
+      return `${column.udt_name.replace(/^_/, '')}[]`;
+    }
+    return column.data_type;
   }
 
   private ruleTimeFilter(rule: 'CURRENT' | 'LAST_7_DAYS' | 'LAST_30_DAYS' | 'ALL', column: string) {
